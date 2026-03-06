@@ -1,0 +1,57 @@
+{
+  "network": {
+    "wsPort": 3014,
+    "maxWsPayloadBytes": 65536,
+    "requestRateWindowMs": 1000,
+    "requestRateMaxRequests": 80,
+    "requestDedupTtlMs": 3000,
+    "requestDedupMaxEntries": 20000
+  },
+  "database": {
+    "mongoUri": "mongodb://localhost:27017/daieryou",
+    "skipMongo": false
+  },
+  "session": {
+    "disconnectGraceMs": 15000,
+    "maxUserProfiles": 5000,
+    "sessionTokenSecret": "daieryou-dev-session-secret",
+    "sessionTokenTtlMs": 2592000000
+  },
+  "roomLifecycle": {
+    "sweepIntervalMs": 30000,
+    "finishedRoomTtlMs": 300000,
+    "offlineWaitingRoomTtlMs": 120000
+  },
+  "game": {
+    "roundSelectionTimeoutMs": 30000
+  },
+  "roomRepository": {
+    "maxInMemoryRooms": 5000
+  },
+  "roomMirror": {
+    "redisUri": "",
+    "keyPrefix": "daieryou:room-mirror",
+    "snapshotTtlMs": 86400000,
+    "connectTimeoutMs": 3000,
+    "syncIntervalMs": 5000,
+    "preferMirrorReads": false,
+    "retryIntervalMs": 2000
+  },
+  "emailAuth": {
+    "enabled": true,
+    "inviteRequired": false,
+    "inviteCodeTtlMs": 604800000,
+    "inviteCodeLength": 8,
+    "memberDefaultDays": 30,
+    "adminEmails": "",
+    "adminInviteListLimit": 50,
+    "verificationCodeTtlMs": 600000,
+    "sendCooldownMs": 60000,
+    "maxVerifyAttempts": 5,
+    "transport": "console",
+    "webhookUrl": "",
+    "fromAddress": "",
+    "resendApiKey": "",
+    "exposeDevCode": false
+  }
+}

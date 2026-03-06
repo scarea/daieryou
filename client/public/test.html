@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>localStorage 测试</title>
+</head>
+<body>
+    <h1>localStorage 测试页面</h1>
+    
+    <div>
+        <input type="text" id="username" placeholder="输入用户名" />
+        <button onclick="saveUser()">保存用户</button>
+        <button onclick="loadUser()">加载用户</button>
+        <button onclick="clearUser()">清除用户</button>
+    </div>
+    
+    <div id="result"></div>
+    
+    <script>
+        function saveUser() {
+            const username = document.getElementById('username').value;
+            if (username) {
+                const user = {
+                    id: 'test-' + Date.now(),
+                    username: username,
+                    score: 1000,
+                    loginTime: Date.now()
+                };
+                localStorage.setItem('daieryou_user', JSON.stringify(user));
+                document.getElementById('result').innerHTML = '用户已保存: ' + JSON.stringify(user);
+            }
+        }
+        
+        function loadUser() {
+            const savedUser = localStorage.getItem('daieryou_user');
+            if (savedUser) {
+                document.getElementById('result').innerHTML = '加载的用户: ' + savedUser;
+                const user = JSON.parse(savedUser);
+                document.getElementById('username').value = user.username;
+            } else {
+                document.getElementById('result').innerHTML = '没有保存的用户';
+            }
+        }
+        
+        function clearUser() {
+            localStorage.removeItem('daieryou_user');
+            document.getElementById('result').innerHTML = '用户已清除';
+            document.getElementById('username').value = '';
+        }
+        
+        // 页面加载时自动检查
+        window.onload = function() {
+            loadUser();
+        }
+    </script>
+</body>
+</html>
+

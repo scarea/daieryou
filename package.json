@@ -1,0 +1,31 @@
+{
+  "name": "daieryou",
+  "version": "1.0.0",
+  "description": "逮二游棋牌游戏 - 3人炸金花游戏",
+  "main": "index.js",
+  "scripts": {
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "dev:all": "bash ./scripts/dev-up.sh",
+    "build:client": "cd client && npm run build",
+    "start:server": "cd server && npm start",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "keywords": [
+    "game",
+    "poker",
+    "multiplayer",
+    "web"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

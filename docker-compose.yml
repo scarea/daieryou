@@ -1,0 +1,66 @@
+name: daieryou
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: daieryou-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: daieryou-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: daieryou-server
+    environment:
+      NODE_ENV: production
+      DAIERYOU_WS_PORT: 3014
+      DAIERYOU_MONGO_URI: mongodb://mongo:27017/daieryou
+      DAIERYOU_REDIS_URI: redis://redis:6379
+      DAIERYOU_SKIP_MONGO: "0"
+    ports:
+      - "3014:3014"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_WS_URL: ws://localhost:3014
+    container_name: daieryou-client
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  mongo_data:

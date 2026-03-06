@@ -1,0 +1,11 @@
+{
+  "roundScores": [1, 2, 3, 4, 5],
+  "publicCardOrder": "random",
+  "fixedCardOrder": [0, 1, 2, 3],
+  "maxPlayersPerRoom": 3,
+  "gameRounds": 5,
+  "handCardsCount": 5,
+  "publicCardsCount": 4,
+  "visiblePublicCards": 3,
+  "hiddenPublicCards": 1
+}
