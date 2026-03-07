@@ -241,3 +241,107 @@ test('roomRepository should enqueue mirror op when mirror returns false', async 
   const retryResult = await repository.retryPendingMirrorOps({ maxOps: 10 })
   assert.deepEqual(retryResult, { retried: 0, failed: 1, remaining: 1 })
 })
+
+test('roomRepository saveWithMode should await mirror first in primary mode', async () => {
+  let resolved = false
+  const repository = new RoomRepository({
+    primaryMirrorWrites: true,
+    roomMirror: {
+      async saveRoom() {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        resolved = true
+        return true
+      },
+      async deleteRoom() {
+        return true
+      },
+    },
+  })
+
+  const savePromise = repository.saveWithMode({
+    id: 'room-primary-save',
+    status: 'waiting',
+    players: [],
+  })
+
+  assert.equal(repository.get('room-primary-save'), null)
+  await savePromise
+  assert.equal(resolved, true)
+  assert.equal(repository.get('room-primary-save')?.id, 'room-primary-save')
+})
+
+test('roomRepository saveWithMode should fallback local and enqueue when mirror fails in primary mode', async () => {
+  const repository = new RoomRepository({
+    primaryMirrorWrites: true,
+    roomMirror: {
+      async saveRoom() {
+        return false
+      },
+      async deleteRoom() {
+        return true
+      },
+    },
+  })
+
+  await repository.saveWithMode({
+    id: 'room-primary-save-fallback',
+    status: 'waiting',
+    players: [],
+  })
+
+  assert.equal(repository.get('room-primary-save-fallback')?.id, 'room-primary-save-fallback')
+  assert.equal(repository.getPendingMirrorOpsCount(), 1)
+})
+
+test('roomRepository deleteWithMode should await mirror first in primary mode', async () => {
+  let mirrorDeleteResolved = false
+  const repository = new RoomRepository({
+    primaryMirrorWrites: true,
+    roomMirror: {
+      async saveRoom() {
+        return true
+      },
+      async deleteRoom() {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        mirrorDeleteResolved = true
+        return true
+      },
+    },
+  })
+
+  repository.save({
+    id: 'room-primary-delete',
+    status: 'waiting',
+    players: [],
+  }, { skipMirror: true })
+
+  const deletePromise = repository.deleteWithMode('room-primary-delete')
+  assert.equal(repository.get('room-primary-delete')?.id, 'room-primary-delete')
+  await deletePromise
+  assert.equal(mirrorDeleteResolved, true)
+  assert.equal(repository.get('room-primary-delete'), null)
+})
+
+test('roomRepository deleteWithMode should fallback local and enqueue when mirror fails in primary mode', async () => {
+  const repository = new RoomRepository({
+    primaryMirrorWrites: true,
+    roomMirror: {
+      async saveRoom() {
+        return true
+      },
+      async deleteRoom() {
+        return false
+      },
+    },
+  })
+
+  repository.save({
+    id: 'room-primary-delete-fallback',
+    status: 'waiting',
+    players: [],
+  }, { skipMirror: true })
+
+  await repository.deleteWithMode('room-primary-delete-fallback')
+  assert.equal(repository.get('room-primary-delete-fallback'), null)
+  assert.equal(repository.getPendingMirrorOpsCount(), 1)
+})

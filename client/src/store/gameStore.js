@@ -12,6 +12,28 @@ const DEFAULT_AUTH_CONFIG = {
   inviteCodeLength: 8,
   memberDefaultDays: 30,
   adminInviteListLimit: 50,
+  adminAuditListLimit: 50,
+}
+const DEFAULT_BATTLE_STATS_SUMMARY = {
+  totalGames: 0,
+  winCount: 0,
+  winRate: 0,
+  avgScore: 0,
+  totalScoreChange: 0,
+  recentScoreChange: 0,
+}
+const DEFAULT_BATTLE_STATS_PAGINATION = {
+  total: 0,
+  page: 1,
+  limit: 20,
+  totalPages: 0,
+  hasMore: false,
+}
+const DEFAULT_BATTLE_STATS_FILTERS = {
+  roomId: '',
+  rank: null,
+  startTime: null,
+  endTime: null,
 }
 
 let eventsBound = false
@@ -156,6 +178,11 @@ function scheduleReconnect(set, get) {
           gameState: null,
           finalScores: null,
           latestRoundResult: null,
+          battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+          battleStatsRecords: [],
+          battleStatsTrend: [],
+          battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+          battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
           isConnected: false,
           isReconnecting: false,
           gameAlert: '登录状态已失效，请重新登录',
@@ -316,6 +343,12 @@ const useGameStore = create((set, get) => ({
   accountInfo: null,
   authConfig: DEFAULT_AUTH_CONFIG,
   adminInviteCodes: [],
+  adminAuditLogs: [],
+  battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+  battleStatsRecords: [],
+  battleStatsTrend: [],
+  battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+  battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
 
   setUser: (user) => {
     persistUser(user)
@@ -375,6 +408,11 @@ const useGameStore = create((set, get) => ({
         currentRoom: null,
         gameState: null,
         finalScores: null,
+        battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+        battleStatsRecords: [],
+        battleStatsTrend: [],
+        battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+        battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
         bootstrapStatus: 'ready',
         isReconnecting: false,
         reconnectAttempts: 0,
@@ -393,6 +431,11 @@ const useGameStore = create((set, get) => ({
       reconnectAttempts: 0,
       reconnectNextRetryAt: null,
       accountInfo: null,
+      battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+      battleStatsRecords: [],
+      battleStatsTrend: [],
+      battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+      battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
     })
   },
 
@@ -426,6 +469,11 @@ const useGameStore = create((set, get) => ({
       reconnectAttempts: 0,
       reconnectNextRetryAt: null,
       accountInfo: payload.account || null,
+      battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+      battleStatsRecords: [],
+      battleStatsTrend: [],
+      battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+      battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
       gameAlert: options.silentReconnect
         ? payload.room
           ? '已重新连接并恢复会话'
@@ -509,6 +557,9 @@ const useGameStore = create((set, get) => ({
         adminInviteListLimit: Number(payload?.adminInviteListLimit) > 0
           ? Number(payload.adminInviteListLimit)
           : DEFAULT_AUTH_CONFIG.adminInviteListLimit,
+        adminAuditListLimit: Number(payload?.adminAuditListLimit) > 0
+          ? Number(payload.adminAuditListLimit)
+          : DEFAULT_AUTH_CONFIG.adminAuditListLimit,
       },
       accountInfo: payload?.currentAccount || state.accountInfo,
     }))
@@ -553,6 +604,11 @@ const useGameStore = create((set, get) => ({
       reconnectAttempts: 0,
       reconnectNextRetryAt: null,
       accountInfo: payload.account || null,
+      battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+      battleStatsRecords: [],
+      battleStatsTrend: [],
+      battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+      battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
       gameAlert: null,
     }))
 
@@ -584,6 +640,11 @@ const useGameStore = create((set, get) => ({
       reconnectAttempts: 0,
       reconnectNextRetryAt: null,
       accountInfo: payload.account || null,
+      battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
+      battleStatsRecords: [],
+      battleStatsTrend: [],
+      battleStatsPagination: DEFAULT_BATTLE_STATS_PAGINATION,
+      battleStatsFilters: DEFAULT_BATTLE_STATS_FILTERS,
       gameAlert: null,
     }))
 
@@ -644,6 +705,63 @@ const useGameStore = create((set, get) => ({
     }
 
     return gameService.adminDisableInviteCode({ code, reason })
+  },
+
+  adminListAuditLogs: async ({ limit, action } = {}) => {
+    if (!get().isConnected) {
+      await get().connect()
+    }
+
+    const payload = await gameService.adminListAuditLogs({ limit, action })
+    set({
+      adminAuditLogs: Array.isArray(payload?.logs)
+        ? payload.logs
+        : [],
+    })
+    return payload
+  },
+
+  fetchBattleStats: async ({
+    limit = DEFAULT_BATTLE_STATS_PAGINATION.limit,
+    page = DEFAULT_BATTLE_STATS_PAGINATION.page,
+    roomId,
+    rank,
+    startTime,
+    endTime,
+  } = {}) => {
+    if (!get().isConnected) {
+      await get().connect()
+    }
+
+    const payload = await gameService.getBattleStats({
+      limit,
+      page,
+      roomId,
+      rank,
+      startTime,
+      endTime,
+    })
+    set({
+      battleStatsSummary: payload?.summary || DEFAULT_BATTLE_STATS_SUMMARY,
+      battleStatsRecords: Array.isArray(payload?.records)
+        ? payload.records
+        : [],
+      battleStatsTrend: Array.isArray(payload?.trend)
+        ? payload.trend
+        : [],
+      battleStatsPagination: payload?.pagination || {
+        ...DEFAULT_BATTLE_STATS_PAGINATION,
+        page: Number(payload?.page) > 0 ? Number(payload.page) : page,
+        limit: Number(payload?.limit) > 0 ? Number(payload.limit) : limit,
+      },
+      battleStatsFilters: payload?.filters || {
+        roomId: typeof roomId === 'string' ? roomId : DEFAULT_BATTLE_STATS_FILTERS.roomId,
+        rank: rank == null ? DEFAULT_BATTLE_STATS_FILTERS.rank : rank,
+        startTime: startTime == null ? DEFAULT_BATTLE_STATS_FILTERS.startTime : startTime,
+        endTime: endTime == null ? DEFAULT_BATTLE_STATS_FILTERS.endTime : endTime,
+      },
+    })
+    return payload
   },
 
   exitCurrentRoom: async () => {

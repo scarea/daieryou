@@ -107,3 +107,85 @@ test('entryHandler adminDisableInviteCode should forward code and reason', async
     appContext.accountAuthService.adminDisableInviteCode = originalAdminDisableInviteCode
   }
 })
+
+test('entryHandler adminListAuditLogs should forward limit and action', async () => {
+  const handler = createEntryHandler()
+  const session = {
+    get(key) {
+      if (key === 'user') {
+        return { id: 'admin-audit' }
+      }
+      return null
+    },
+  }
+  const originalAdminListAuditLogs = appContext.accountAuthService.adminListAuditLogs
+  const captured = []
+
+  appContext.accountAuthService.adminListAuditLogs = async (currentUser, payload) => {
+    captured.push({ currentUser, payload })
+    return { logs: [] }
+  }
+
+  try {
+    const result = await new Promise((resolve) => {
+      handler.adminListAuditLogs({
+        limit: 20,
+        action: 'membership.grant',
+      }, session, (err, body) => resolve({ err, body }))
+    })
+
+    assert.equal(result.err, null)
+    assert.equal(result.body.code, 200)
+    assert.equal(captured.length, 1)
+    assert.equal(captured[0].currentUser.id, 'admin-audit')
+    assert.equal(captured[0].payload.limit, 20)
+    assert.equal(captured[0].payload.action, 'membership.grant')
+  } finally {
+    appContext.accountAuthService.adminListAuditLogs = originalAdminListAuditLogs
+  }
+})
+
+test('entryHandler getBattleStats should forward query options', async () => {
+  const handler = createEntryHandler()
+  const session = {
+    get(key) {
+      if (key === 'user') {
+        return { id: 'battle-user' }
+      }
+      return null
+    },
+  }
+  const originalGetBattleStats = appContext.battleRecordService.getBattleStats
+  const captured = []
+
+  appContext.battleRecordService.getBattleStats = (currentUser, payload) => {
+    captured.push({ currentUser, payload })
+    return { summary: {}, records: [] }
+  }
+
+  try {
+    const result = await new Promise((resolve) => {
+      handler.getBattleStats({
+        limit: 12,
+        page: 2,
+        roomId: 'room-42',
+        rank: 1,
+        startTime: 1000,
+        endTime: 2000,
+      }, session, (err, body) => resolve({ err, body }))
+    })
+
+    assert.equal(result.err, null)
+    assert.equal(result.body.code, 200)
+    assert.equal(captured.length, 1)
+    assert.equal(captured[0].currentUser.id, 'battle-user')
+    assert.equal(captured[0].payload.limit, 12)
+    assert.equal(captured[0].payload.page, 2)
+    assert.equal(captured[0].payload.roomId, 'room-42')
+    assert.equal(captured[0].payload.rank, 1)
+    assert.equal(captured[0].payload.startTime, 1000)
+    assert.equal(captured[0].payload.endTime, 2000)
+  } finally {
+    appContext.battleRecordService.getBattleStats = originalGetBattleStats
+  }
+})

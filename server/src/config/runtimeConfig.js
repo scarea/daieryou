@@ -52,6 +52,7 @@ function loadRuntimeConfig(env = process.env) {
   const database = runtimeConfig.database || {}
   const session = runtimeConfig.session || {}
   const roomLifecycle = runtimeConfig.roomLifecycle || {}
+  const battleRecordLifecycle = runtimeConfig.battleRecordLifecycle || {}
   const game = runtimeConfig.game || {}
   const roomRepository = runtimeConfig.roomRepository || {}
   const roomMirror = runtimeConfig.roomMirror || {}
@@ -111,6 +112,32 @@ function loadRuntimeConfig(env = process.env) {
         roomLifecycle.offlineWaitingRoomTtlMs || 2 * 60 * 1000,
       ),
     },
+    battleRecordLifecycle: {
+      enabled: parseBoolean(
+        env.DAIERYOU_BATTLE_RECORD_CLEANUP_ENABLED,
+        battleRecordLifecycle.enabled ?? false,
+      ),
+      sweepIntervalMs: parsePositiveNumber(
+        env.DAIERYOU_BATTLE_RECORD_CLEANUP_INTERVAL_MS,
+        battleRecordLifecycle.sweepIntervalMs || 60 * 60 * 1000,
+      ),
+      retentionMs: parsePositiveNumber(
+        env.DAIERYOU_BATTLE_RECORD_RETENTION_MS,
+        battleRecordLifecycle.retentionMs || 90 * 24 * 60 * 60 * 1000,
+      ),
+      cleanupBatchSize: parsePositiveNumber(
+        env.DAIERYOU_BATTLE_RECORD_CLEANUP_BATCH_SIZE,
+        battleRecordLifecycle.cleanupBatchSize || 500,
+      ),
+      maxBatchesPerSweep: parsePositiveNumber(
+        env.DAIERYOU_BATTLE_RECORD_CLEANUP_MAX_BATCHES,
+        battleRecordLifecycle.maxBatchesPerSweep || 3,
+      ),
+      archiveBeforeCleanup: parseBoolean(
+        env.DAIERYOU_BATTLE_RECORD_ARCHIVE_BEFORE_CLEANUP,
+        battleRecordLifecycle.archiveBeforeCleanup ?? true,
+      ),
+    },
     game: {
       roundSelectionTimeoutMs: parsePositiveNumber(
         env.DAIERYOU_ROUND_SELECTION_TIMEOUT_MS,
@@ -145,6 +172,10 @@ function loadRuntimeConfig(env = process.env) {
         env.DAIERYOU_ROOM_MIRROR_PREFER_READS,
         roomMirror.preferMirrorReads ?? false,
       ),
+      primaryMirrorWrites: parseBoolean(
+        env.DAIERYOU_ROOM_MIRROR_PRIMARY_WRITES,
+        roomMirror.primaryMirrorWrites ?? false,
+      ),
       retryIntervalMs: parsePositiveNumber(
         env.DAIERYOU_ROOM_MIRROR_RETRY_INTERVAL_MS,
         roomMirror.retryIntervalMs || 2000,
@@ -178,6 +209,10 @@ function loadRuntimeConfig(env = process.env) {
       adminInviteListLimit: parsePositiveNumber(
         env.DAIERYOU_AUTH_ADMIN_INVITE_LIST_LIMIT,
         emailAuth.adminInviteListLimit || 50,
+      ),
+      adminAuditListLimit: parsePositiveNumber(
+        env.DAIERYOU_AUTH_ADMIN_AUDIT_LIST_LIMIT,
+        emailAuth.adminAuditListLimit || 50,
       ),
       verificationCodeTtlMs: parsePositiveNumber(
         env.DAIERYOU_EMAIL_VERIFY_CODE_TTL_MS,

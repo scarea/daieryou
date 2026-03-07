@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --test tests/**/*.test.js",
+    "audit:battle-indexes": "node scripts/audit-battle-record-indexes.js"
   },
   "dependencies": {
     "mongoose": "^8.0.3",

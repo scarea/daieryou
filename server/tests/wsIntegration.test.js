@@ -101,6 +101,54 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function openRawSocket(port) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`)
+    ws.once('open', () => resolve(ws))
+    ws.once('error', reject)
+  })
+}
+
+function waitForSocketMessage(ws, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error('ws message timeout'))
+    }, timeoutMs)
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      ws.off('message', onMessage)
+      ws.off('error', onError)
+    }
+
+    const onMessage = (raw) => {
+      cleanup()
+      resolve(JSON.parse(raw.toString()))
+    }
+
+    const onError = (error) => {
+      cleanup()
+      reject(error)
+    }
+
+    ws.on('message', onMessage)
+    ws.on('error', onError)
+  })
+}
+
+function closeRawSocket(ws) {
+  return new Promise((resolve) => {
+    if (!ws || ws.readyState >= WebSocket.CLOSING) {
+      resolve()
+      return
+    }
+
+    ws.once('close', resolve)
+    ws.close()
+  })
+}
+
 function waitForEvent(client, predicate, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const start = Date.now()
@@ -304,6 +352,97 @@ test('request rate limit should return 429 when exceeded', { timeout: 15000 }, a
     const tooManyRequestResponse = responses.find((entry) => entry.code === 429)
     assert.ok(tooManyRequestResponse)
     assert.equal(tooManyRequestResponse.error, '请求过于频繁，请稍后再试')
+    assert.equal(typeof tooManyRequestResponse.traceId, 'string')
+    assert.ok(tooManyRequestResponse.traceId.length > 0)
+  } finally {
+    await Promise.all(clients.map((client) => client.close()))
+    await stopServer(serverProcess)
+  }
+})
+
+test('invalid json payload should return 400 with traceId', { timeout: 15000 }, async () => {
+  const port = randomPort()
+  const serverProcess = await startServer(port)
+  let ws = null
+
+  try {
+    ws = await openRawSocket(port)
+    ws.send('{invalid-json')
+    const response = await waitForSocketMessage(ws)
+
+    assert.equal(response.id, null)
+    assert.equal(response.body.code, 400)
+    assert.equal(response.body.error, '请求体不是合法 JSON')
+    assert.equal(typeof response.body.traceId, 'string')
+    assert.ok(response.body.traceId.length > 0)
+  } finally {
+    await closeRawSocket(ws)
+    await stopServer(serverProcess)
+  }
+})
+
+test('invalid request envelope should return 400 with traceId', { timeout: 15000 }, async () => {
+  const port = randomPort()
+  const serverProcess = await startServer(port)
+  let ws = null
+
+  try {
+    ws = await openRawSocket(port)
+    ws.send(JSON.stringify({
+      id: 7,
+      route: 'game.roomHandler.getRoomList',
+      body: [],
+    }))
+    const response = await waitForSocketMessage(ws)
+
+    assert.equal(response.id, 7)
+    assert.equal(response.body.code, 400)
+    assert.equal(response.body.error, 'body 必须是对象')
+    assert.equal(typeof response.body.traceId, 'string')
+    assert.ok(response.body.traceId.length > 0)
+  } finally {
+    await closeRawSocket(ws)
+    await stopServer(serverProcess)
+  }
+})
+
+test('unknown route should return 404 with traceId', { timeout: 15000 }, async () => {
+  const port = randomPort()
+  const serverProcess = await startServer(port)
+  const clients = []
+
+  try {
+    const user = await createClient(port, 'Unknown-Route')
+    clients.push(user)
+
+    const response = await user.request('game.roomHandler.notFoundRoute', {})
+    assert.equal(response.code, 404)
+    assert.match(response.error, /路由不存在/)
+    assert.equal(typeof response.traceId, 'string')
+    assert.ok(response.traceId.length > 0)
+  } finally {
+    await Promise.all(clients.map((client) => client.close()))
+    await stopServer(serverProcess)
+  }
+})
+
+test('known route should reject unknown body fields by allowlist', { timeout: 15000 }, async () => {
+  const port = randomPort()
+  const serverProcess = await startServer(port)
+  const clients = []
+
+  try {
+    const user = await createClient(port, 'Allowlist-Tester')
+    clients.push(user)
+
+    const response = await user.request('game.roomHandler.createRoom', {
+      operationId: 'create-room-op',
+      unexpectedField: 'bad',
+    })
+    assert.equal(response.code, 400)
+    assert.equal(response.error, 'body 包含未允许字段: unexpectedField')
+    assert.equal(typeof response.traceId, 'string')
+    assert.ok(response.traceId.length > 0)
   } finally {
     await Promise.all(clients.map((client) => client.close()))
     await stopServer(serverProcess)

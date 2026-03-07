@@ -17,6 +17,7 @@ class AccountAuthService {
   constructor({
     accountRepository,
     inviteCodeRepository = null,
+    adminAuditRepository = null,
     authService,
     emailSender,
     emailEnabled = true,
@@ -26,6 +27,7 @@ class AccountAuthService {
     memberDefaultDays = DEFAULT_MEMBER_DAYS,
     adminEmails = [],
     adminInviteListLimit = 50,
+    adminAuditListLimit = 50,
     verificationCodeTtlMs = 10 * 60 * 1000,
     sendCooldownMs = 60 * 1000,
     maxVerifyAttempts = 5,
@@ -34,6 +36,7 @@ class AccountAuthService {
   }) {
     this.accountRepository = accountRepository
     this.inviteCodeRepository = inviteCodeRepository
+    this.adminAuditRepository = adminAuditRepository
     this.authService = authService
     this.emailSender = emailSender
     this.emailEnabled = emailEnabled !== false
@@ -54,6 +57,7 @@ class AccountAuthService {
         : [],
     )
     this.adminInviteListLimit = Math.max(10, Math.min(200, Math.floor(Number(adminInviteListLimit) || 50)))
+    this.adminAuditListLimit = Math.max(10, Math.min(200, Math.floor(Number(adminAuditListLimit) || 50)))
     this.verificationCodeTtlMs = verificationCodeTtlMs
     this.sendCooldownMs = sendCooldownMs
     this.maxVerifyAttempts = maxVerifyAttempts
@@ -179,6 +183,35 @@ class AccountAuthService {
     }
   }
 
+  toPublicAuditLog(log) {
+    if (!log) {
+      return null
+    }
+
+    return {
+      action: log.action,
+      actorUserId: log.actorUserId || null,
+      actorEmail: log.actorEmail || null,
+      targetUserId: log.targetUserId || null,
+      targetEmail: log.targetEmail || null,
+      source: log.source || 'system',
+      detail: log.detail && typeof log.detail === 'object' ? log.detail : {},
+      createdAt: log.createdAt,
+    }
+  }
+
+  async writeAuditLog(payload) {
+    if (!this.adminAuditRepository) {
+      return null
+    }
+
+    try {
+      return await this.adminAuditRepository.createLog(payload)
+    } catch (error) {
+      return null
+    }
+  }
+
   generateInviteCode() {
     let code = ''
     for (let index = 0; index < this.inviteCodeLength; index += 1) {
@@ -196,6 +229,7 @@ class AccountAuthService {
       inviteCodeLength: this.inviteCodeLength,
       memberDefaultDays: this.memberDefaultDays,
       adminInviteListLimit: this.adminInviteListLimit,
+      adminAuditListLimit: this.adminAuditListLimit,
       currentAccount: null,
     }
 
@@ -248,6 +282,23 @@ class AccountAuthService {
           createdAt: now,
         })
 
+        await this.writeAuditLog({
+          action: 'invite.create',
+          actorUserId: account.userId,
+          actorEmail: account.email,
+          targetUserId: null,
+          targetEmail: null,
+          source: 'member-self',
+          detail: {
+            code: inviteCode.code,
+            channel: inviteMeta.channel || 'member',
+            campaign: inviteMeta.campaign || '',
+            remark: inviteMeta.remark || '',
+            expiresAt,
+          },
+          createdAt: now,
+        })
+
         return {
           code: inviteCode.code,
           expiresAt: inviteCode.expiresAt,
@@ -286,6 +337,20 @@ class AccountAuthService {
       memberExpiresAt: nextExpiresAt,
     })
 
+    await this.writeAuditLog({
+      action: 'membership.purchase',
+      actorUserId: account.userId,
+      actorEmail: account.email,
+      targetUserId: account.userId,
+      targetEmail: account.email,
+      source: 'self-service',
+      detail: {
+        planDays: days,
+        expiresAt: nextExpiresAt,
+      },
+      createdAt: now,
+    })
+
     return {
       account: this.toPublicAccount(updatedAccount),
       planDays: days,
@@ -319,6 +384,21 @@ class AccountAuthService {
     const updatedAccount = await this.accountRepository.updateByEmail(email, {
       isMember: true,
       memberExpiresAt: nextExpiresAt,
+    })
+
+    await this.writeAuditLog({
+      action: 'membership.grant',
+      actorUserId: adminAccount.userId,
+      actorEmail: adminAccount.email,
+      targetUserId: targetAccount.userId,
+      targetEmail: targetAccount.email,
+      source: 'admin',
+      detail: {
+        planDays: days,
+        expiresAt: nextExpiresAt,
+        reason: typeof reason === 'string' ? reason.trim().slice(0, 120) : '',
+      },
+      createdAt: now,
     })
 
     return {
@@ -379,8 +459,46 @@ class AccountAuthService {
       throw new Error('邀请码不存在或已被禁用')
     }
 
+    await this.writeAuditLog({
+      action: 'invite.disable',
+      actorUserId: adminAccount.userId,
+      actorEmail: adminAccount.email,
+      targetUserId: disabled.creatorUserId || null,
+      targetEmail: null,
+      source: 'admin',
+      detail: {
+        code: disabled.code,
+        reason: disabled.disabledReason || (typeof reason === 'string' ? reason.trim().slice(0, 120) : ''),
+      },
+      createdAt: Date.now(),
+    })
+
     return {
       inviteCode: this.toPublicInviteCode(disabled),
+    }
+  }
+
+  async adminListAuditLogs(currentUser, { limit = this.adminAuditListLimit, action = null } = {}) {
+    this.assertEmailEnabled()
+    if (!this.adminAuditRepository) {
+      throw new Error('审计日志服务未初始化')
+    }
+    if (!currentUser?.id) {
+      throw new Error('用户未登录')
+    }
+
+    const adminAccount = await this.accountRepository.findByUserId(currentUser.id)
+    this.assertAdminAccount(adminAccount)
+
+    const safeLimit = Math.min(Math.max(1, Number(limit) || this.adminAuditListLimit), this.adminAuditListLimit)
+    const logs = await this.adminAuditRepository.listLogs({
+      limit: safeLimit,
+      action,
+    })
+
+    return {
+      logs: logs.map((log) => this.toPublicAuditLog(log)),
+      limit: safeLimit,
     }
   }
 
@@ -635,7 +753,7 @@ class AccountAuthService {
     }
 
     const sessionToken = this.authService.issueSessionToken(userId)
-    const payload = this.authService.login(nextUsername, session, sessionToken)
+    const payload = await this.authService.login(nextUsername, session, sessionToken)
     const createdAccount = await this.accountRepository.findByEmail(email)
     return {
       ...payload,
@@ -665,7 +783,7 @@ class AccountAuthService {
     })
 
     const sessionToken = this.authService.issueSessionToken(account.userId)
-    const payload = this.authService.login(account.username, session, sessionToken)
+    const payload = await this.authService.login(account.username, session, sessionToken)
     return {
       ...payload,
       account: this.toPublicAccount(account),

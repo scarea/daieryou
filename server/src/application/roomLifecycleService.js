@@ -20,7 +20,7 @@ class RoomLifecycleService {
     }
 
     this.timer = setInterval(() => {
-      this.cleanupExpiredRooms()
+      this.cleanupExpiredRooms().catch(() => {})
     }, this.sweepIntervalMs)
 
     if (typeof this.timer.unref === 'function') {
@@ -37,7 +37,7 @@ class RoomLifecycleService {
     this.timer = null
   }
 
-  cleanupExpiredRooms(now = Date.now()) {
+  async cleanupExpiredRooms(now = Date.now()) {
     const removedRoomIds = []
     const rooms = this.roomRepository.listAll()
 
@@ -47,7 +47,7 @@ class RoomLifecycleService {
       if (room.status === 'finished') {
         const finishedAt = room.finishedAt || updatedAt
         if (now - finishedAt >= this.finishedRoomTtlMs) {
-          this.roomRepository.delete(room.id)
+          await this.roomRepository.deleteWithMode(room.id)
           removedRoomIds.push(room.id)
         }
         continue
@@ -55,7 +55,7 @@ class RoomLifecycleService {
 
       const allOffline = room.players.length > 0 && room.players.every((player) => player.online === false)
       if (room.status === 'waiting' && allOffline && now - updatedAt >= this.offlineWaitingRoomTtlMs) {
-        this.roomRepository.delete(room.id)
+        await this.roomRepository.deleteWithMode(room.id)
         removedRoomIds.push(room.id)
       }
     }

@@ -7,11 +7,13 @@ class GameService {
     roomRepository,
     broadcaster,
     lobbyBroadcaster,
+    battleRecordService = null,
     roundSelectionTimeoutMs = 30000,
   }) {
     this.roomRepository = roomRepository
     this.broadcaster = broadcaster
     this.lobbyBroadcaster = lobbyBroadcaster
+    this.battleRecordService = battleRecordService
     this.roundSelectionTimeoutMs = Number.isInteger(roundSelectionTimeoutMs) && roundSelectionTimeoutMs > 0
       ? roundSelectionTimeoutMs
       : 30000
@@ -59,7 +61,7 @@ class GameService {
     room.gameState.roundDeadlineAt = Date.now() + timeoutMs
     const timer = setTimeout(() => {
       this.roundTimers.delete(room.id)
-      this.handleRoundTimeout(room.id)
+      this.handleRoundTimeout(room.id).catch(() => {})
     }, timeoutMs)
 
     if (typeof timer.unref === 'function') {
@@ -107,7 +109,7 @@ class GameService {
     return autoSelectedCount
   }
 
-  resolveRoundIfReady(room, responseUserId = null) {
+  async resolveRoundIfReady(room, responseUserId = null) {
     if (!room?.gameState || !room.gameState.players.every((item) => item.hasSelected)) {
       return null
     }
@@ -119,7 +121,7 @@ class GameService {
     if (room.gameState.currentRound < room.gameState.maxRounds) {
       prepareNextRound(room.gameState, roundResult.loserIndex)
       this.scheduleRoundTimer(room)
-      this.roomRepository.save(room)
+      await this.roomRepository.saveWithMode(room)
       this.broadcaster.broadcastPerPlayer(room, 'roundResult', (targetPlayer) => ({
         roundResult,
         room: publicRoom,
@@ -149,8 +151,19 @@ class GameService {
       roundScores: playerItem.roundScores,
     }))
     room.gameState = null
+    if (this.battleRecordService?.recordGameFinished) {
+      try {
+        await this.battleRecordService.recordGameFinished({
+          roomId: room.id,
+          finishedAt: room.finishedAt,
+          finalScores: room.finalScores,
+        })
+      } catch (error) {
+        // no-op
+      }
+    }
 
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
     const finishedRoom = serializeRoom(room)
     this.broadcaster.broadcast(room, 'roomUpdated', { room: finishedRoom })
     this.broadcaster.broadcastPerPlayer(room, 'roundResult', (targetPlayer) => ({
@@ -172,7 +185,7 @@ class GameService {
     return null
   }
 
-  handleRoundTimeout(roomId) {
+  async handleRoundTimeout(roomId) {
     const room = this.roomRepository.get(roomId)
     if (!room?.gameState || room.status !== 'playing') {
       return
@@ -183,18 +196,18 @@ class GameService {
       return
     }
 
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
     if (!room.gameState.players.every((item) => item.hasSelected)) {
       this.broadcastGameStateUpdate(room, 'timeout-partial')
       this.scheduleRoundTimer(room)
-      this.roomRepository.save(room)
+      await this.roomRepository.saveWithMode(room)
       return
     }
 
-    this.resolveRoundIfReady(room, null)
+    await this.resolveRoundIfReady(room, null)
   }
 
-  startGame(user, roomId) {
+  async startGame(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -220,7 +233,7 @@ class GameService {
     room.finishedAt = null
     room.status = 'playing'
     this.scheduleRoundTimer(room)
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
 
     const publicRoom = serializeRoom(room)
     this.broadcaster.broadcast(room, 'roomUpdated', { room: publicRoom })
@@ -233,7 +246,7 @@ class GameService {
     return getPublicGameState(room.gameState, user.id)
   }
 
-  restartGame(user, roomId) {
+  async restartGame(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -259,7 +272,7 @@ class GameService {
     room.finishedAt = null
     room.status = 'playing'
     this.scheduleRoundTimer(room)
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
 
     const publicRoom = serializeRoom(room)
     this.broadcaster.broadcast(room, 'roomUpdated', { room: publicRoom })
@@ -272,7 +285,7 @@ class GameService {
     return getPublicGameState(room.gameState, user.id)
   }
 
-  selectCards(user, roomId, round, selectedCards) {
+  async selectCards(user, roomId, round, selectedCards) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -327,9 +340,9 @@ class GameService {
     player.selectedCards = deduplicated
     player.hasSelected = true
     player.selectedByTimeout = false
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
 
-    const responseGameState = this.resolveRoundIfReady(room, user.id)
+    const responseGameState = await this.resolveRoundIfReady(room, user.id)
     if (responseGameState !== null) {
       return responseGameState
     }

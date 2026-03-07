@@ -3,12 +3,16 @@ const { RoomRepository } = require('../infrastructure/roomRepository')
 const { RedisRoomMirror } = require('../infrastructure/redisRoomMirror')
 const { AccountRepository } = require('../infrastructure/accountRepository')
 const { InviteCodeRepository } = require('../infrastructure/inviteCodeRepository')
+const { AdminAuditRepository } = require('../infrastructure/adminAuditRepository')
+const { BattleRecordRepository } = require('../infrastructure/battleRecordRepository')
 const { EmailSender } = require('../infrastructure/emailSender')
 const { RoomBroadcaster } = require('../infrastructure/roomBroadcaster')
 const { LobbyBroadcaster } = require('../infrastructure/lobbyBroadcaster')
 const { RoomService } = require('./roomService')
 const { AuthService } = require('./authService')
 const { AccountAuthService } = require('./accountAuthService')
+const { BattleRecordService } = require('./battleRecordService')
+const { BattleRecordLifecycleService } = require('./battleRecordLifecycleService')
 const { GameService } = require('./gameService')
 const { RoomLifecycleService } = require('./roomLifecycleService')
 const { loadRuntimeConfig } = require('../config/runtimeConfig')
@@ -18,6 +22,8 @@ const runtimeConfig = loadRuntimeConfig()
 const sessionRepository = new SessionRepository()
 const accountRepository = new AccountRepository()
 const inviteCodeRepository = new InviteCodeRepository()
+const adminAuditRepository = new AdminAuditRepository()
+const battleRecordRepository = new BattleRecordRepository()
 const roomMirror = new RedisRoomMirror({
   ...runtimeConfig.roomMirror,
 })
@@ -30,10 +36,18 @@ const emailSender = new EmailSender({
 const roomRepository = new RoomRepository({
   roomMirror,
   maxInMemoryRooms: runtimeConfig.roomRepository.maxInMemoryRooms,
+  primaryMirrorWrites: runtimeConfig.roomMirror.primaryMirrorWrites,
 })
 const broadcaster = new RoomBroadcaster(sessionRepository)
 const lobbyBroadcaster = new LobbyBroadcaster({ sessionRepository, roomRepository })
 const roomService = new RoomService({ roomRepository, broadcaster, lobbyBroadcaster })
+const battleRecordService = new BattleRecordService({
+  battleRecordRepository,
+})
+const battleRecordLifecycleService = new BattleRecordLifecycleService({
+  battleRecordRepository,
+  ...runtimeConfig.battleRecordLifecycle,
+})
 const roomLifecycleService = new RoomLifecycleService({
   roomRepository,
   lobbyBroadcaster,
@@ -44,13 +58,17 @@ const appContext = {
   sessionRepository,
   accountRepository,
   inviteCodeRepository,
+  adminAuditRepository,
+  battleRecordRepository,
   roomRepository,
   roomMirror,
   emailSender,
   broadcaster,
   lobbyBroadcaster,
   roomLifecycleService,
+  battleRecordLifecycleService,
   roomService,
+  battleRecordService,
   authService: null,
   accountAuthService: null,
   gameService: null,
@@ -70,6 +88,7 @@ appContext.authService = new AuthService({
 appContext.accountAuthService = new AccountAuthService({
   accountRepository,
   inviteCodeRepository,
+  adminAuditRepository,
   authService: appContext.authService,
   emailSender,
   emailEnabled: runtimeConfig.emailAuth.enabled,
@@ -79,6 +98,7 @@ appContext.accountAuthService = new AccountAuthService({
   memberDefaultDays: runtimeConfig.emailAuth.memberDefaultDays,
   adminEmails: runtimeConfig.emailAuth.adminEmails,
   adminInviteListLimit: runtimeConfig.emailAuth.adminInviteListLimit,
+  adminAuditListLimit: runtimeConfig.emailAuth.adminAuditListLimit,
   verificationCodeTtlMs: runtimeConfig.emailAuth.verificationCodeTtlMs,
   sendCooldownMs: runtimeConfig.emailAuth.sendCooldownMs,
   maxVerifyAttempts: runtimeConfig.emailAuth.maxVerifyAttempts,
@@ -89,6 +109,7 @@ appContext.gameService = new GameService({
   roomRepository,
   broadcaster,
   lobbyBroadcaster,
+  battleRecordService,
   roundSelectionTimeoutMs: runtimeConfig.game.roundSelectionTimeoutMs,
 })
 

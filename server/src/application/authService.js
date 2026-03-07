@@ -168,7 +168,7 @@ class AuthService {
     return userId
   }
 
-  login(username, session, sessionToken) {
+  async login(username, session, sessionToken) {
     if (!username || !username.trim()) {
       throw new Error('用户名不能为空')
     }
@@ -181,7 +181,7 @@ class AuthService {
 
     this.clearDisconnectTimer(userId)
 
-    const room = this.roomService.setUserOnline({ id: userId, username: normalizedUsername })
+    const room = await this.roomService.setUserOnline({ id: userId, username: normalizedUsername })
     const user = this.getBaseUser(userId, normalizedUsername)
     const nextSessionToken = this.issueSessionToken(user.id)
 
@@ -201,21 +201,21 @@ class AuthService {
     }
   }
 
-  disconnect(session) {
+  async disconnect(session) {
     const user = session.get('user')
     if (!user || session.superseded) {
       return null
     }
 
     this.rememberUserProfile(user)
-    this.roomService.setUserOffline(user.id, this.disconnectGraceMs)
+    await this.roomService.setUserOffline(user.id, this.disconnectGraceMs)
     this.clearDisconnectTimer(user.id)
 
     const timer = setTimeout(() => {
       this.disconnectTimers.delete(user.id)
       this.roomService.cleanupUserFromRooms(user.id, {
         reason: `${user.username} 断线超时，已离开房间`,
-      })
+      }).catch(() => {})
     }, this.disconnectGraceMs)
     if (typeof timer.unref === 'function') {
       timer.unref()

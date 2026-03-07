@@ -49,36 +49,36 @@ function createAuthService(maxUserProfiles = 2) {
   })
 }
 
-test('login should reject too long username', () => {
+test('login should reject too long username', async () => {
   const service = createAuthService()
   const session = createSession('s-1')
 
-  assert.throws(
+  await assert.rejects(
     () => service.login('x'.repeat(25), session),
     /用户名不能超过24个字符/,
   )
 })
 
-test('login should reject invalid session token', () => {
+test('login should reject invalid session token', async () => {
   const service = createAuthService()
   const session = createSession('s-2')
 
-  assert.throws(
+  await assert.rejects(
     () => service.login('Tester', session, 'bad-token'),
     /会话已失效，请重新登录/,
   )
 })
 
-test('userProfiles should keep bounded size', () => {
+test('userProfiles should keep bounded size', async () => {
   const service = createAuthService(2)
 
   const token1 = service.issueSessionToken('u1')
   const token2 = service.issueSessionToken('u2')
   const token3 = service.issueSessionToken('u3')
 
-  service.login('A', createSession('s-3'), token1)
-  service.login('B', createSession('s-4'), token2)
-  service.login('C', createSession('s-5'), token3)
+  await service.login('A', createSession('s-3'), token1)
+  await service.login('B', createSession('s-4'), token2)
+  await service.login('C', createSession('s-5'), token3)
 
   assert.equal(service.userProfiles.size, 2)
   assert.equal(service.userProfiles.has('u1'), false)
@@ -86,20 +86,20 @@ test('userProfiles should keep bounded size', () => {
   assert.equal(service.userProfiles.has('u3'), true)
 })
 
-test('login should keep same userId when session token is valid', () => {
+test('login should keep same userId when session token is valid', async () => {
   const service = createAuthService(2)
-  const firstLogin = service.login('Tester', createSession('s-6'))
-  const secondLogin = service.login('Tester', createSession('s-7'), firstLogin.sessionToken)
+  const firstLogin = await service.login('Tester', createSession('s-6'))
+  const secondLogin = await service.login('Tester', createSession('s-7'), firstLogin.sessionToken)
 
   assert.equal(secondLogin.user.id, firstLogin.user.id)
   assert.equal(typeof secondLogin.sessionToken, 'string')
   assert.ok(secondLogin.sessionToken.length > 20)
 })
 
-test('login without session token should create different user ids', () => {
+test('login without session token should create different user ids', async () => {
   const service = createAuthService(2)
-  const firstLogin = service.login('A', createSession('s-8'))
-  const secondLogin = service.login('A', createSession('s-9'))
+  const firstLogin = await service.login('A', createSession('s-8'))
+  const secondLogin = await service.login('A', createSession('s-9'))
 
   assert.notEqual(firstLogin.user.id, secondLogin.user.id)
 })

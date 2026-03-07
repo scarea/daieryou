@@ -16,8 +16,8 @@ class RoomService {
     return serializeRoomList(this.roomRepository.listWaitingRooms())
   }
 
-  saveAndBroadcastRoom(room) {
-    this.roomRepository.save(room)
+  async saveAndBroadcastRoom(room) {
+    await this.roomRepository.saveWithMode(room)
     const publicRoom = serializeRoom(room)
     this.broadcaster.broadcast(room, 'roomUpdated', { room: publicRoom })
     this.lobbyBroadcaster.broadcastRoomList()
@@ -44,7 +44,7 @@ class RoomService {
     }
   }
 
-  setUserOnline(user) {
+  async setUserOnline(user) {
     const room = this.getCurrentRoomForUser(user.id)
     if (!room) {
       return null
@@ -57,7 +57,7 @@ class RoomService {
       lastSeenAt: Date.now(),
     }))
 
-    this.saveAndBroadcastRoom(room)
+    await this.saveAndBroadcastRoom(room)
     this.broadcaster.broadcast(room, 'playerConnectionChanged', {
       room: serializeRoom(room),
       userId: user.id,
@@ -68,7 +68,7 @@ class RoomService {
     return room
   }
 
-  setUserOffline(userId, graceMs) {
+  async setUserOffline(userId, graceMs) {
     const room = this.getCurrentRoomForUser(userId)
     if (!room) {
       return null
@@ -85,7 +85,7 @@ class RoomService {
       lastSeenAt: Date.now(),
     }))
 
-    this.saveAndBroadcastRoom(room)
+    await this.saveAndBroadcastRoom(room)
     this.broadcaster.broadcast(room, 'playerConnectionChanged', {
       room: serializeRoom(room),
       userId,
@@ -96,7 +96,7 @@ class RoomService {
     return room
   }
 
-  createRoom(user) {
+  async createRoom(user) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -123,12 +123,12 @@ class RoomService {
       finishedAt: null,
     }
 
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
     this.lobbyBroadcaster.broadcastRoomList()
     return serializeRoom(room)
   }
 
-  joinRoom(user, roomId) {
+  async joinRoom(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -160,7 +160,7 @@ class RoomService {
     return this.saveAndBroadcastRoom(room)
   }
 
-  leaveRoom(user, roomId) {
+  async leaveRoom(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -179,7 +179,7 @@ class RoomService {
     })
   }
 
-  removeUserFromRoom(room, userId, options = {}) {
+  async removeUserFromRoom(room, userId, options = {}) {
     const leavingPlayer = room.players.find((player) => player.id === userId)
     if (!leavingPlayer) {
       return { deleted: false, room: serializeRoom(room) }
@@ -193,7 +193,7 @@ class RoomService {
     }
 
     if (room.players.length === 0) {
-      this.roomRepository.delete(room.id)
+      await this.roomRepository.deleteWithMode(room.id)
       this.lobbyBroadcaster.broadcastRoomList()
       return { deleted: true, room: null }
     }
@@ -209,7 +209,7 @@ class RoomService {
       room.finishedAt = Date.now()
     }
 
-    this.roomRepository.save(room)
+    await this.roomRepository.saveWithMode(room)
 
     const publicRoom = serializeRoom(room)
     this.broadcaster.broadcast(room, 'playerLeft', {
@@ -230,13 +230,13 @@ class RoomService {
     return { deleted: false, room: publicRoom }
   }
 
-  cleanupUserFromRooms(userId, options = {}) {
+  async cleanupUserFromRooms(userId, options = {}) {
     for (const [, room] of this.roomRepository.entries()) {
       if (!room.players.some((player) => player.id === userId)) {
         continue
       }
 
-      this.removeUserFromRoom(room, userId, options)
+      await this.removeUserFromRoom(room, userId, options)
     }
   }
 }

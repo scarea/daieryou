@@ -130,9 +130,45 @@ class Handler {
     }
   }
 
+  async adminListAuditLogs(msg, session, next) {
+    try {
+      const payload = await appContext.accountAuthService.adminListAuditLogs(
+        session.get('user'),
+        {
+          limit: msg?.limit,
+          action: msg?.action,
+        },
+      )
+      next(null, { code: 200, data: payload })
+    } catch (error) {
+      const code = error.message === '用户未登录' ? 401 : 400
+      next(null, { code, error: error.message })
+    }
+  }
+
+  async getBattleStats(msg, session, next) {
+    try {
+      const payload = await appContext.battleRecordService.getBattleStats(
+        session.get('user'),
+        {
+          limit: msg?.limit,
+          page: msg?.page,
+          roomId: msg?.roomId,
+          rank: msg?.rank,
+          startTime: msg?.startTime,
+          endTime: msg?.endTime,
+        },
+      )
+      next(null, { code: 200, data: payload })
+    } catch (error) {
+      const code = error.message === '用户未登录' ? 401 : 400
+      next(null, { code, error: error.message })
+    }
+  }
+
   async login(msg, session, next) {
     try {
-      const payload = appContext.authService.login(msg?.username, session, msg?.sessionToken)
+      const payload = await appContext.authService.login(msg?.username, session, msg?.sessionToken)
       next(null, { code: 200, data: payload })
     } catch (error) {
       const code = error.message === '会话已失效，请重新登录' ? 401 : 400
@@ -141,7 +177,7 @@ class Handler {
   }
 
   async disconnect(msg, session, next) {
-    appContext.authService.disconnect(session)
+    await appContext.authService.disconnect(session)
     next()
   }
 }

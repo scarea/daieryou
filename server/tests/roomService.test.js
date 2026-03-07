@@ -16,7 +16,7 @@ function createRoomServiceFixture() {
   return { roomService, roomRepository }
 }
 
-test('leaveRoom should reject user that is not in target room', () => {
+test('leaveRoom should reject user that is not in target room', async () => {
   const { roomService, roomRepository } = createRoomServiceFixture()
   const host = { id: 'u1', username: 'Host', score: 1000, online: true }
   const outsider = { id: 'u9', username: 'Outsider', score: 1000, online: true }
@@ -31,7 +31,7 @@ test('leaveRoom should reject user that is not in target room', () => {
     createdAt: Date.now(),
   })
 
-  assert.throws(
+  await assert.rejects(
     () => roomService.leaveRoom(outsider, 'room-1'),
     /不在房间中/,
   )

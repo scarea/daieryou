@@ -23,7 +23,7 @@ function createLifecycleFixture() {
   return { roomRepository, lifecycleService, lobbyBroadcaster }
 }
 
-test('cleanupExpiredRooms should remove expired finished rooms', () => {
+test('cleanupExpiredRooms should remove expired finished rooms', async () => {
   const { roomRepository, lifecycleService, lobbyBroadcaster } = createLifecycleFixture()
   const now = Date.now()
 
@@ -35,13 +35,13 @@ test('cleanupExpiredRooms should remove expired finished rooms', () => {
     finishedAt: now - 10_000,
   })
 
-  const removed = lifecycleService.cleanupExpiredRooms(now)
+  const removed = await lifecycleService.cleanupExpiredRooms(now)
   assert.deepEqual(removed, ['room-finished'])
   assert.equal(roomRepository.get('room-finished'), null)
   assert.equal(lobbyBroadcaster.count, 1)
 })
 
-test('cleanupExpiredRooms should remove offline waiting rooms', () => {
+test('cleanupExpiredRooms should remove offline waiting rooms', async () => {
   const { roomRepository, lifecycleService, lobbyBroadcaster } = createLifecycleFixture()
   const now = Date.now()
 
@@ -57,13 +57,13 @@ test('cleanupExpiredRooms should remove offline waiting rooms', () => {
   const waitingRoom = roomRepository.get('room-waiting-offline')
   waitingRoom.updatedAt = now - 10_000
 
-  const removed = lifecycleService.cleanupExpiredRooms(now)
+  const removed = await lifecycleService.cleanupExpiredRooms(now)
   assert.deepEqual(removed, ['room-waiting-offline'])
   assert.equal(roomRepository.get('room-waiting-offline'), null)
   assert.equal(lobbyBroadcaster.count, 1)
 })
 
-test('cleanupExpiredRooms should keep active waiting rooms', () => {
+test('cleanupExpiredRooms should keep active waiting rooms', async () => {
   const { roomRepository, lifecycleService, lobbyBroadcaster } = createLifecycleFixture()
   const now = Date.now()
 
@@ -74,7 +74,7 @@ test('cleanupExpiredRooms should keep active waiting rooms', () => {
     createdAt: now - 10_000,
   })
 
-  const removed = lifecycleService.cleanupExpiredRooms(now)
+  const removed = await lifecycleService.cleanupExpiredRooms(now)
   assert.deepEqual(removed, [])
   assert.ok(roomRepository.get('room-waiting-active'))
   assert.equal(lobbyBroadcaster.count, 0)

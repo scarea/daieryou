@@ -16,6 +16,7 @@ function createSession() {
 
 function createFixture() {
   const accounts = new Map()
+  const auditLogs = []
   const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
   const accountRepository = {
     async findByEmail(email) {
@@ -174,9 +175,26 @@ function createFixture() {
       return { delivered: true, delivery: 'console' }
     },
   }
+  const adminAuditRepository = {
+    async createLog(entry) {
+      const log = {
+        ...entry,
+        createdAt: Number.isFinite(entry?.createdAt) ? entry.createdAt : Date.now(),
+      }
+      auditLogs.push(log)
+      return log
+    },
+    async listLogs({ limit = 50, action = null } = {}) {
+      return auditLogs
+        .filter((log) => !action || log.action === action)
+        .slice(-limit)
+        .reverse()
+    },
+  }
   const service = new AccountAuthService({
     accountRepository,
     inviteCodeRepository,
+    adminAuditRepository,
     authService,
     emailSender,
     verificationCodeTtlMs: 60_000,
@@ -190,6 +208,8 @@ function createFixture() {
     service,
     accountRepository,
     inviteCodeRepository,
+    adminAuditRepository,
+    auditLogs,
   }
 }
 
@@ -304,7 +324,7 @@ test('account auth should rollback invite code when verification code is invalid
 })
 
 test('account auth should purchase and renew membership', async () => {
-  const { service, accountRepository } = createFixture()
+  const { service, accountRepository, auditLogs } = createFixture()
 
   await accountRepository.create({
     email: 'buyer@example.com',
@@ -324,6 +344,7 @@ test('account auth should purchase and renew membership', async () => {
 
   const renewed = await service.purchaseMembership({ id: 'buyer-user' }, { planDays: 30 })
   assert.ok(renewed.expiresAt > firstPurchase.expiresAt)
+  assert.equal(auditLogs.some((log) => log.action === 'membership.purchase'), true)
 })
 
 test('admin account should grant membership to target account', async () => {
@@ -364,7 +385,7 @@ test('admin account should grant membership to target account', async () => {
 })
 
 test('admin account should list and disable invite codes', async () => {
-  const { service, accountRepository, inviteCodeRepository } = createFixture()
+  const { service, accountRepository, inviteCodeRepository, auditLogs } = createFixture()
 
   await accountRepository.create({
     email: 'admin2@example.com',
@@ -399,6 +420,47 @@ test('admin account should list and disable invite codes', async () => {
 
   assert.equal(disabled.inviteCode.status, 'disabled')
   assert.equal(disabled.inviteCode.disabledReason, 'risk-control')
+  assert.equal(auditLogs.some((log) => log.action === 'invite.disable'), true)
+})
+
+test('admin account should list audit logs', async () => {
+  const { service, accountRepository } = createFixture()
+
+  await accountRepository.create({
+    email: 'admin-audit@example.com',
+    userId: 'admin-audit-user',
+    username: 'AdminAudit',
+    passwordSalt: 'salt',
+    passwordHash: 'hash',
+    verifiedAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    isAdmin: true,
+  })
+
+  await accountRepository.create({
+    email: 'audit-target@example.com',
+    userId: 'audit-target-user',
+    username: 'AuditTarget',
+    passwordSalt: 'salt',
+    passwordHash: 'hash',
+    verifiedAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  })
+
+  await service.adminGrantMembership(
+    { id: 'admin-audit-user' },
+    { targetEmail: 'audit-target@example.com', durationDays: 30, reason: 'audit-test' },
+  )
+
+  const listed = await service.adminListAuditLogs(
+    { id: 'admin-audit-user' },
+    { limit: 20, action: 'membership.grant' },
+  )
+  assert.equal(Array.isArray(listed.logs), true)
+  assert.equal(listed.logs.length > 0, true)
+  assert.equal(listed.logs[0].action, 'membership.grant')
 })
 
 test('non-admin account should not grant membership or manage invite codes', async () => {

@@ -4,6 +4,59 @@ const { v4: uuidv4 } = require('uuid')
 const { appContext } = require('./src/application/appContext')
 
 const enableVerboseLog = process.env.DAIERYOU_VERBOSE_LOG === '1'
+const MAX_ROUTE_LENGTH = 120
+const MAX_REQUEST_ID_LENGTH = 64
+const MAX_BODY_FIELD_COUNT = 64
+const MAX_BODY_FIELD_NAME_LENGTH = 64
+
+const ROUTE_BODY_ALLOWLIST = new Map([
+  ['connector.entryHandler.getAuthConfig', new Set()],
+  ['connector.entryHandler.sendEmailCode', new Set(['email'])],
+  ['connector.entryHandler.register', new Set(['email', 'password', 'verificationCode', 'username', 'inviteCode'])],
+  ['connector.entryHandler.loginWithPassword', new Set(['email', 'password'])],
+  ['connector.entryHandler.createInviteCode', new Set(['channel', 'campaign', 'remark', 'operationId'])],
+  ['connector.entryHandler.purchaseMembership', new Set(['planDays', 'operationId'])],
+  ['connector.entryHandler.adminGrantMembership', new Set(['targetEmail', 'durationDays', 'reason', 'operationId'])],
+  ['connector.entryHandler.adminListInviteCodes', new Set(['limit', 'status'])],
+  ['connector.entryHandler.adminDisableInviteCode', new Set(['code', 'reason', 'operationId'])],
+  ['connector.entryHandler.adminListAuditLogs', new Set(['limit', 'action'])],
+  ['connector.entryHandler.getBattleStats', new Set(['limit', 'page', 'roomId', 'rank', 'startTime', 'endTime'])],
+  ['connector.entryHandler.login', new Set(['username', 'sessionToken'])],
+  ['game.roomHandler.createRoom', new Set(['operationId'])],
+  ['game.roomHandler.joinRoom', new Set(['roomId', 'operationId'])],
+  ['game.roomHandler.leaveRoom', new Set(['roomId', 'operationId'])],
+  ['game.roomHandler.getRoomList', new Set()],
+  ['game.gameHandler.startGame', new Set(['roomId', 'operationId'])],
+  ['game.gameHandler.selectCards', new Set(['roomId', 'round', 'selectedCards', 'operationId'])],
+  ['game.gameHandler.restartGame', new Set(['roomId', 'operationId'])],
+])
+
+const gatewayMetrics = {
+  incomingMessages: 0,
+  validationRejected: 0,
+  validationRejectedByReason: Object.create(null),
+  rateLimitedHits: 0,
+  dedupHits: 0,
+}
+
+function logGatewayEvent(level, event, payload = {}) {
+  const logEntry = {
+    ts: new Date().toISOString(),
+    event,
+    ...payload,
+  }
+
+  const message = JSON.stringify(logEntry)
+  if (level === 'error') {
+    console.error(message)
+    return
+  }
+  if (level === 'warn') {
+    console.warn(message)
+    return
+  }
+  console.log(message)
+}
 
 async function connectDatabase() {
   if (appContext.runtimeConfig.skipMongo) {
@@ -240,6 +293,260 @@ function storeDedupResponse(dedupKey, body, now = Date.now()) {
   sweepDedupCache(now)
 }
 
+function parseStatusCode(code, fallback) {
+  const parsed = Math.floor(Number(code))
+  if (!Number.isFinite(parsed) || parsed < 100 || parsed > 599) {
+    return fallback
+  }
+
+  return parsed
+}
+
+function normalizeErrorMessage(message, fallback) {
+  if (typeof message !== 'string') {
+    return fallback
+  }
+
+  const normalized = message.trim()
+  return normalized || fallback
+}
+
+function buildErrorBody(code, error, traceId) {
+  return {
+    code: parseStatusCode(code, 500),
+    error: normalizeErrorMessage(error, '处理失败'),
+    traceId,
+  }
+}
+
+function attachTraceId(body, traceId) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return buildErrorBody(500, '处理失败', traceId)
+  }
+
+  const code = parseStatusCode(body.code, 500)
+  const responseBody = {
+    ...body,
+    code,
+    traceId,
+  }
+
+  if (code >= 400) {
+    responseBody.error = normalizeErrorMessage(
+      responseBody.error,
+      code >= 500 ? '处理失败' : '请求失败',
+    )
+  }
+
+  return responseBody
+}
+
+function stripTraceId(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return body
+  }
+
+  const { traceId, ...rest } = body
+  return rest
+}
+
+function sendWsResponse(ws, id, body) {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return
+  }
+
+  ws.send(JSON.stringify({
+    id,
+    body,
+  }))
+}
+
+function recordGatewayMetric(name, detail = null) {
+  if (name === 'incoming') {
+    gatewayMetrics.incomingMessages += 1
+    return
+  }
+  if (name === 'rate_limited') {
+    gatewayMetrics.rateLimitedHits += 1
+    return
+  }
+  if (name === 'dedup_hit') {
+    gatewayMetrics.dedupHits += 1
+    return
+  }
+  if (name === 'validation_rejected') {
+    gatewayMetrics.validationRejected += 1
+    const reason = typeof detail === 'string' && detail.trim()
+      ? detail.trim()
+      : 'unknown'
+    gatewayMetrics.validationRejectedByReason[reason] = (
+      gatewayMetrics.validationRejectedByReason[reason] || 0
+    ) + 1
+  }
+}
+
+function buildGatewayMetricsSnapshot() {
+  return {
+    incomingMessages: gatewayMetrics.incomingMessages,
+    validationRejected: gatewayMetrics.validationRejected,
+    validationRejectedByReason: { ...gatewayMetrics.validationRejectedByReason },
+    rateLimitedHits: gatewayMetrics.rateLimitedHits,
+    dedupHits: gatewayMetrics.dedupHits,
+  }
+}
+
+function validateRouteBodyAllowlist(route, body) {
+  const allowlist = ROUTE_BODY_ALLOWLIST.get(route)
+  if (!allowlist) {
+    return { valid: true }
+  }
+
+  const keys = Object.keys(body)
+  for (const key of keys) {
+    if (!allowlist.has(key)) {
+      return {
+        valid: false,
+        reason: 'body_unknown_field',
+        error: `body 包含未允许字段: ${key}`,
+      }
+    }
+  }
+
+  return { valid: true }
+}
+
+function isValidRequestId(id) {
+  if (Number.isInteger(id)) {
+    return id >= 0
+  }
+  if (typeof id !== 'string') {
+    return false
+  }
+
+  const normalized = id.trim()
+  return normalized.length > 0 && normalized.length <= MAX_REQUEST_ID_LENGTH
+}
+
+function validateIncomingMessage(msg) {
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+    return {
+      valid: false,
+      id: null,
+      code: 400,
+      reason: 'request_not_object',
+      error: '请求体格式无效',
+    }
+  }
+
+  const { id, route, body } = msg
+  if (!isValidRequestId(id)) {
+    return {
+      valid: false,
+      id: null,
+      code: 400,
+      reason: 'invalid_request_id',
+      error: '请求 id 无效',
+    }
+  }
+
+  if (typeof route !== 'string') {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'route_missing',
+      error: '路由不能为空',
+    }
+  }
+
+  const normalizedRoute = route.trim()
+  if (!normalizedRoute) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'route_missing',
+      error: '路由不能为空',
+    }
+  }
+  if (normalizedRoute.length > MAX_ROUTE_LENGTH) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'route_too_long',
+      error: '路由长度超限',
+    }
+  }
+
+  const normalizedBody = body == null ? {} : body
+  if (typeof normalizedBody !== 'object' || Array.isArray(normalizedBody)) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'body_not_object',
+      error: 'body 必须是对象',
+    }
+  }
+
+  const bodyKeys = Object.keys(normalizedBody)
+  if (bodyKeys.length > MAX_BODY_FIELD_COUNT) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'body_too_many_fields',
+      error: 'body 字段过多',
+    }
+  }
+
+  const tooLongKey = bodyKeys.find((key) => key.length > MAX_BODY_FIELD_NAME_LENGTH)
+  if (tooLongKey) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: 'body_field_name_too_long',
+      error: 'body 字段名过长',
+    }
+  }
+
+  const allowlistValidation = validateRouteBodyAllowlist(normalizedRoute, normalizedBody)
+  if (!allowlistValidation.valid) {
+    return {
+      valid: false,
+      id,
+      code: 400,
+      reason: allowlistValidation.reason || 'body_allowlist_rejected',
+      error: allowlistValidation.error || '请求字段不合法',
+    }
+  }
+
+  return {
+    valid: true,
+    id,
+    route: normalizedRoute,
+    body: normalizedBody,
+  }
+}
+
+function normalizeHandlerResponse(err, result, traceId) {
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const fallbackCode = err ? 500 : 200
+    const normalized = attachTraceId({
+      ...result,
+      code: parseStatusCode(result.code, fallbackCode),
+    }, traceId)
+    if (!normalized.error && normalized.code >= 500 && err?.message) {
+      normalized.error = normalizeErrorMessage(err.message, '处理失败')
+    }
+    return normalized
+  }
+
+  return buildErrorBody(500, err?.message || '处理失败', traceId)
+}
+
 wss.on('connection', (ws) => {
   const sessionId = uuidv4()
   const session = {
@@ -266,28 +573,61 @@ wss.on('connection', (ws) => {
 
   ws.on('message', async (data) => {
     let requestId = null
+    let routeName = null
+    const traceId = uuidv4()
+    const startedAt = Date.now()
+    recordGatewayMetric('incoming')
     try {
-      const msg = JSON.parse(data.toString())
-      const { id, route, body } = msg
-      requestId = id
-      const now = Date.now()
-
-      if (typeof route !== 'string' || !route.trim()) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            id,
-            body: { code: 400, error: '路由不能为空' },
-          }))
-        }
+      let msg = null
+      try {
+        msg = JSON.parse(data.toString())
+      } catch (error) {
+        recordGatewayMetric('validation_rejected', 'invalid_json')
+        logGatewayEvent('warn', 'gateway.request.rejected', {
+          traceId,
+          sessionId,
+          code: 400,
+          reason: 'invalid_json',
+        })
+        sendWsResponse(ws, null, buildErrorBody(400, '请求体不是合法 JSON', traceId))
         return
       }
+
+      const validation = validateIncomingMessage(msg)
+      if (!validation.valid) {
+        recordGatewayMetric('validation_rejected', validation.reason)
+        logGatewayEvent('warn', 'gateway.request.rejected', {
+          traceId,
+          sessionId,
+          requestId: validation.id,
+          code: validation.code,
+          reason: validation.reason,
+        })
+        sendWsResponse(
+          ws,
+          validation.id,
+          buildErrorBody(validation.code, validation.error, traceId),
+        )
+        return
+      }
+
+      const { id, route, body } = validation
+      routeName = route
+      requestId = id
+      const now = Date.now()
+      const userId = session.get('user')?.id || null
+
       if (isRateLimited(session, now)) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            id,
-            body: { code: 429, error: '请求过于频繁，请稍后再试' },
-          }))
-        }
+        recordGatewayMetric('rate_limited')
+        logGatewayEvent('warn', 'gateway.request.rate_limited', {
+          traceId,
+          sessionId,
+          userId,
+          requestId: id,
+          route,
+          code: 429,
+        })
+        sendWsResponse(ws, id, buildErrorBody(429, '请求过于频繁，请稍后再试', traceId))
         return
       }
 
@@ -298,9 +638,17 @@ wss.on('connection', (ws) => {
       const dedupKey = canDedup ? buildDedupKey(session, route, operationId) : null
       const cachedResponseBody = getDedupResponse(dedupKey)
       if (cachedResponseBody) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ id, body: cachedResponseBody }))
+        recordGatewayMetric('dedup_hit')
+        if (enableVerboseLog) {
+          logGatewayEvent('info', 'gateway.request.dedup_hit', {
+            traceId,
+            sessionId,
+            userId,
+            requestId: id,
+            route,
+          })
         }
+        sendWsResponse(ws, id, attachTraceId(cachedResponseBody, traceId))
         return
       }
 
@@ -323,38 +671,86 @@ wss.on('connection', (ws) => {
       }
 
       if (handler && handler[method]) {
-        handler[method](body, session, (err, result) => {
-          const responseBody = result || { code: 500, error: err?.message || '处理失败' }
+        let responded = false
+        const finish = (err, result) => {
+          if (responded) {
+            return
+          }
+          responded = true
+
+          const responseBody = normalizeHandlerResponse(err, result, traceId)
           if (dedupKey && responseBody.code < 500) {
-            storeDedupResponse(dedupKey, responseBody)
+            storeDedupResponse(dedupKey, stripTraceId(responseBody), now)
           }
+          if (responseBody.code >= 400) {
+            logGatewayEvent('warn', 'gateway.request.failed', {
+              traceId,
+              sessionId,
+              userId,
+              requestId: id,
+              route,
+              code: responseBody.code,
+              error: responseBody.error,
+              durationMs: Date.now() - startedAt,
+            })
+          } else if (enableVerboseLog) {
+            logGatewayEvent('info', 'gateway.request.succeeded', {
+              traceId,
+              sessionId,
+              userId,
+              requestId: id,
+              route,
+              code: responseBody.code,
+              durationMs: Date.now() - startedAt,
+            })
+          }
+          sendWsResponse(ws, id, responseBody)
+        }
 
-          const response = {
-            id,
-            body: responseBody,
-          }
-
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(response))
-          }
-        })
+        try {
+          Promise.resolve(handler[method](body, session, finish)).catch((error) => {
+            logGatewayEvent('error', 'gateway.handler.promise_rejected', {
+              traceId,
+              sessionId,
+              userId,
+              requestId: id,
+              route,
+              error: error?.message || 'handler promise rejected',
+            })
+            finish(error, null)
+          })
+        } catch (error) {
+          logGatewayEvent('error', 'gateway.handler.execution_failed', {
+            traceId,
+            sessionId,
+            userId,
+            requestId: id,
+            route,
+            error: error?.message || 'handler execution failed',
+          })
+          finish(error, null)
+        }
         return
       }
 
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          id,
-          body: { code: 404, error: `路由不存在: ${route}` },
-        }))
-      }
+      logGatewayEvent('warn', 'gateway.request.route_not_found', {
+        traceId,
+        sessionId,
+        userId,
+        requestId: id,
+        route,
+        code: 404,
+      })
+      sendWsResponse(ws, id, buildErrorBody(404, `路由不存在: ${route}`, traceId))
     } catch (error) {
-      console.error('消息处理错误:', error)
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          id: requestId,
-          body: { code: 500, error: '消息处理失败，请稍后重试' },
-        }))
-      }
+      logGatewayEvent('error', 'gateway.request.exception', {
+        traceId,
+        sessionId,
+        requestId,
+        route: routeName,
+        error: error?.message || '消息处理异常',
+      })
+      sendWsResponse(ws, requestId, buildErrorBody(500, '消息处理失败，请稍后重试', traceId))
     }
   })
 
@@ -380,10 +776,13 @@ restoreRoomsFromMirror().catch((error) => {
 startRoomMirrorSyncTask()
 startRoomMirrorRetryTask()
 appContext.roomLifecycleService.start()
+appContext.battleRecordLifecycleService.start()
 
 process.on('SIGINT', async () => {
   console.log('服务器正在关闭...')
+  console.log('[gateway-metrics] snapshot:', JSON.stringify(buildGatewayMetricsSnapshot()))
   appContext.roomLifecycleService.stop()
+  appContext.battleRecordLifecycleService.stop()
   if (roomMirrorSyncTimer) {
     clearInterval(roomMirrorSyncTimer)
     roomMirrorSyncTimer = null

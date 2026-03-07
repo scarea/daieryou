@@ -14,7 +14,7 @@ class Handler {
    */
   async startGame(msg, session, next) {
     try {
-      const gameState = appContext.gameService.startGame(session.get('user'), msg.roomId)
+      const gameState = await appContext.gameService.startGame(session.get('user'), msg.roomId)
       next(null, { code: 200, data: { gameState } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '房间不存在' ? 404 : 400
@@ -27,7 +27,12 @@ class Handler {
    */
   async selectCards(msg, session, next) {
     try {
-      const gameState = appContext.gameService.selectCards(session.get('user'), msg.roomId, msg.round, msg.selectedCards)
+      const gameState = await appContext.gameService.selectCards(
+        session.get('user'),
+        msg.roomId,
+        msg.round,
+        msg.selectedCards,
+      )
       next(null, { code: 200, data: { gameState } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '游戏不存在' ? 404 : 400
@@ -37,7 +42,7 @@ class Handler {
 
   async restartGame(msg, session, next) {
     try {
-      const gameState = appContext.gameService.restartGame(session.get('user'), msg.roomId)
+      const gameState = await appContext.gameService.restartGame(session.get('user'), msg.roomId)
       next(null, { code: 200, data: { gameState } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '房间不存在' ? 404 : 400

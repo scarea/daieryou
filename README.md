@@ -121,6 +121,7 @@ npm run dev:all
 - `DAIERYOU_ROOM_MIRROR_CONNECT_TIMEOUT_MS`: Redis 连接超时（默认 `3000`）
 - `DAIERYOU_ROOM_MIRROR_SYNC_INTERVAL_MS`: 增量同步间隔（默认 `5000`）
 - `DAIERYOU_ROOM_MIRROR_PREFER_READS`: 是否优先从 Redis 镜像读（`1/true`，默认关闭）
+- `DAIERYOU_ROOM_MIRROR_PRIMARY_WRITES`: 是否启用 Redis 主写模式（`1/true`；失败时自动降级本地写并入重试队列）
 - `DAIERYOU_ROOM_MIRROR_RETRY_INTERVAL_MS`: 镜像写失败重试间隔（默认 `2000`）
 - `DAIERYOU_EMAIL_TRANSPORT`: 邮件发送通道（`console`/`webhook`/`resend`，默认 `console`）
 - `DAIERYOU_EMAIL_WEBHOOK_URL`: 自定义邮件 webhook 地址（`transport=webhook` 时生效）
@@ -133,10 +134,17 @@ npm run dev:all
 - `DAIERYOU_AUTH_MEMBER_DEFAULT_DAYS`: 会员默认开通/续费天数（默认 `30`）
 - `DAIERYOU_AUTH_ADMIN_EMAILS`: 管理员邮箱白名单（逗号分隔）
 - `DAIERYOU_AUTH_ADMIN_INVITE_LIST_LIMIT`: 管理端单次邀请码列表上限（默认 `50`）
+- `DAIERYOU_AUTH_ADMIN_AUDIT_LIST_LIMIT`: 管理端单次审计日志列表上限（默认 `50`）
 - `DAIERYOU_VERBOSE_LOG`: 是否输出每条消息日志（`1` 启用）
 - `DAIERYOU_ROOM_SWEEP_INTERVAL_MS`: 房间回收扫描间隔
 - `DAIERYOU_FINISHED_ROOM_TTL_MS`: 结算房间回收阈值
 - `DAIERYOU_OFFLINE_WAITING_ROOM_TTL_MS`: 全离线等待房间回收阈值
+- `DAIERYOU_BATTLE_RECORD_CLEANUP_ENABLED`: 战绩清理任务灰度开关（默认关闭）
+- `DAIERYOU_BATTLE_RECORD_CLEANUP_INTERVAL_MS`: 战绩清理扫描间隔
+- `DAIERYOU_BATTLE_RECORD_RETENTION_MS`: 战绩保留窗口（毫秒）
+- `DAIERYOU_BATTLE_RECORD_CLEANUP_BATCH_SIZE`: 单批清理条数
+- `DAIERYOU_BATTLE_RECORD_CLEANUP_MAX_BATCHES`: 单轮最大清理批次数
+- `DAIERYOU_BATTLE_RECORD_ARCHIVE_BEFORE_CLEANUP`: 是否先归档再删除
 
 ## 游戏特性
 
@@ -146,6 +154,9 @@ npm run dev:all
 - ✅ 会员体系 MVP（自助开通/续费）
 - ✅ 邀请码体系（会员生成 + 注册消费）
 - ✅ 管理台 MVP（会员发放 + 邀请码列表/禁用）
+- ✅ 管理审计日志 MVP（关键操作落审计 + 管理员列表查询）
+- ✅ 战绩总览 MVP（近 N 局结果、胜率、总分变化，Mongo 持久化）
+- ✅ 战绩治理基础（按时间窗口归档/清理 + 索引巡检脚本）
 - ✅ 房间创建/加入
 - ✅ 实时多人游戏
 - ✅ 完整的炸金花牌型判断
@@ -153,6 +164,12 @@ npm run dev:all
 - ✅ 积分计算系统
 - ✅ 暗牌机制
 - ✅ 游戏历史记录
+
+### 战绩能力现状（2026-03-07）
+- 查询能力：支持 `page/limit` 分页，支持 `roomId/rank/startTime/endTime` 过滤。
+- 治理能力：支持按保留窗口分批“归档后清理”，默认关闭，需灰度开启。
+- 巡检能力：支持 `npm run audit:battle-indexes` 校验主集合与归档集合索引完整性。
+- 下一步：补齐战绩查询性能基线（Explain/压测）与对外字段文档。
 
 ### 配置系统
 游戏规则可通过 `server/config/game-config.json` 配置：
@@ -184,6 +201,9 @@ npm run dev:server
 # 服务端单元/集成测试
 cd server
 npm test
+
+# 战绩索引巡检（Mongo）
+npm run audit:battle-indexes
 
 # 前端端到端（Playwright）
 cd ..
@@ -225,6 +245,7 @@ docker compose down
 - 会员中心入口位于大厅，可执行会员开通/续费与邀请码生成。
 - 管理员账号通过 `DAIERYOU_AUTH_ADMIN_EMAILS`（逗号分隔邮箱）配置，登录后可见“管理台（最小版）”。
 - 当前会员能力为 MVP，尚未接入真实支付订单与回调。
+- 战绩治理与索引巡检流程见 `docs/battle-record-governance.md`。
 
 ## 许可证
 MIT License

@@ -66,6 +66,22 @@ export const gameService = {
       operationId: buildOperationId('admin-disable-invite', [code || '']),
     }).then(unwrapResponse)
   },
+  adminListAuditLogs({ limit, action } = {}) {
+    return realtimeClient.request('connector.entryHandler.adminListAuditLogs', {
+      limit,
+      action,
+    }).then(unwrapResponse)
+  },
+  getBattleStats({ limit, page, roomId, rank, startTime, endTime } = {}) {
+    return realtimeClient.request('connector.entryHandler.getBattleStats', {
+      limit,
+      page,
+      roomId,
+      rank,
+      startTime,
+      endTime,
+    }).then(unwrapResponse)
+  },
   login(username, sessionToken) {
     return realtimeClient.request('connector.entryHandler.login', { username, sessionToken }).then(unwrapResponse)
   },

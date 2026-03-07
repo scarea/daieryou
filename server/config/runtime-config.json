@@ -22,6 +22,14 @@
     "finishedRoomTtlMs": 300000,
     "offlineWaitingRoomTtlMs": 120000
   },
+  "battleRecordLifecycle": {
+    "enabled": false,
+    "sweepIntervalMs": 3600000,
+    "retentionMs": 7776000000,
+    "cleanupBatchSize": 500,
+    "maxBatchesPerSweep": 3,
+    "archiveBeforeCleanup": true
+  },
   "game": {
     "roundSelectionTimeoutMs": 30000
   },
@@ -35,6 +43,7 @@
     "connectTimeoutMs": 3000,
     "syncIntervalMs": 5000,
     "preferMirrorReads": false,
+    "primaryMirrorWrites": false,
     "retryIntervalMs": 2000
   },
   "emailAuth": {
@@ -45,6 +54,7 @@
     "memberDefaultDays": 30,
     "adminEmails": "",
     "adminInviteListLimit": 50,
+    "adminAuditListLimit": 50,
     "verificationCodeTtlMs": 600000,
     "sendCooldownMs": 60000,
     "maxVerifyAttempts": 5,

@@ -1,28 +1,67 @@
 class RoomRepository {
-  constructor({ roomMirror = null, maxInMemoryRooms = Number.POSITIVE_INFINITY } = {}) {
+  constructor({
+    roomMirror = null,
+    maxInMemoryRooms = Number.POSITIVE_INFINITY,
+    primaryMirrorWrites = false,
+  } = {}) {
     this.rooms = new Map()
     this.roomMirror = roomMirror
+    this.primaryMirrorWrites = primaryMirrorWrites === true
     this.maxInMemoryRooms = Number.isFinite(maxInMemoryRooms) && maxInMemoryRooms > 0
       ? maxInMemoryRooms
       : Number.POSITIVE_INFINITY
     this.pendingMirrorOps = new Map()
   }
 
-  save(room, options = {}) {
-    const now = Date.now()
+  applyRoomTimestamps(room, now = Date.now()) {
     if (!room.createdAt) {
       room.createdAt = now
     }
     room.updatedAt = now
+    return room
+  }
+
+  saveLocal(room, { protectedRoomId = null } = {}) {
     this.rooms.set(room.id, room)
+    this.evictIfNeeded(protectedRoomId || room.id)
+    return room
+  }
+
+  save(room, options = {}) {
+    this.applyRoomTimestamps(room)
+    this.saveLocal(room, { protectedRoomId: room.id })
 
     if (!options.skipMirror && this.roomMirror?.saveRoom) {
       this.pushMirrorSave(room)
     }
 
-    this.evictIfNeeded(room.id)
-
     return room
+  }
+
+  async saveWithMode(room, options = {}) {
+    this.applyRoomTimestamps(room)
+    const shouldPrimaryWrite = this.primaryMirrorWrites
+      && !options.skipMirror
+      && this.roomMirror?.saveRoom
+
+    if (!shouldPrimaryWrite) {
+      return this.save(room, options)
+    }
+
+    try {
+      const saved = await this.roomMirror.saveRoom(room)
+      if (saved === false) {
+        throw new Error('mirror save returned false')
+      }
+    } catch (error) {
+      console.error('[room-repository] primary mirror save failed:', error.message)
+      this.pendingMirrorOps.set(room.id, {
+        type: 'save',
+        room,
+      })
+    }
+
+    return this.saveLocal(room, { protectedRoomId: room.id })
   }
 
   get(roomId) {
@@ -35,6 +74,32 @@ class RoomRepository {
     if (!options.skipMirror && this.roomMirror?.deleteRoom) {
       this.pushMirrorDelete(roomId)
     }
+  }
+
+  async deleteWithMode(roomId, options = {}) {
+    const shouldPrimaryWrite = this.primaryMirrorWrites
+      && !options.skipMirror
+      && this.roomMirror?.deleteRoom
+
+    if (!shouldPrimaryWrite) {
+      this.delete(roomId, options)
+      return
+    }
+
+    try {
+      const deleted = await this.roomMirror.deleteRoom(roomId)
+      if (deleted === false) {
+        throw new Error('mirror delete returned false')
+      }
+    } catch (error) {
+      console.error('[room-repository] primary mirror delete failed:', error.message)
+      this.pendingMirrorOps.set(roomId, {
+        type: 'delete',
+        roomId,
+      })
+    }
+
+    this.deleteLocal(roomId)
   }
 
   listWaitingRooms() {

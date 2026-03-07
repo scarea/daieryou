@@ -8,6 +8,7 @@ function createServiceFixture(options = {}) {
   const roomRepository = new RoomRepository()
   const broadcastCalls = []
   const perPlayerBroadcastCalls = []
+  const battleRecordCalls = []
   const broadcaster = {
     broadcast(room, event, payload) {
       broadcastCalls.push({ roomId: room.id, event, payload })
@@ -35,9 +36,21 @@ function createServiceFixture(options = {}) {
     roomRepository,
     broadcaster,
     lobbyBroadcaster,
+    battleRecordService: {
+      recordGameFinished(payload) {
+        battleRecordCalls.push(payload)
+      },
+    },
     roundSelectionTimeoutMs: options.roundSelectionTimeoutMs,
   })
-  return { service, roomRepository, broadcastCalls, perPlayerBroadcastCalls, lobbyBroadcaster }
+  return {
+    service,
+    roomRepository,
+    broadcastCalls,
+    perPlayerBroadcastCalls,
+    lobbyBroadcaster,
+    battleRecordCalls,
+  }
 }
 
 function createPlayers() {
@@ -48,7 +61,7 @@ function createPlayers() {
   ]
 }
 
-test('startGame should reject non-host user', () => {
+test('startGame should reject non-host user', async () => {
   const { service, roomRepository } = createServiceFixture()
   const players = createPlayers()
 
@@ -62,13 +75,13 @@ test('startGame should reject non-host user', () => {
     createdAt: Date.now(),
   })
 
-  assert.throws(
+  await assert.rejects(
     () => service.startGame(players[1], 'room-1'),
     /只有房主可以开始游戏/,
   )
 })
 
-test('restartGame should reject unfinished room', () => {
+test('restartGame should reject unfinished room', async () => {
   const { service, roomRepository } = createServiceFixture()
   const players = createPlayers()
 
@@ -82,13 +95,13 @@ test('restartGame should reject unfinished room', () => {
     createdAt: Date.now(),
   })
 
-  assert.throws(
+  await assert.rejects(
     () => service.restartGame(players[0], 'room-2'),
     /当前对局尚未结束/,
   )
 })
 
-test('selectCards should reject stale round payload', () => {
+test('selectCards should reject stale round payload', async () => {
   const { service, roomRepository } = createServiceFixture()
   const players = createPlayers()
   const gameState = createInitialGameState(players)
@@ -104,13 +117,13 @@ test('selectCards should reject stale round payload', () => {
     createdAt: Date.now(),
   })
 
-  assert.throws(
+  await assert.rejects(
     () => service.selectCards(players[0], 'room-3', 99, [0, 1]),
     /当前回合已更新，请重新选择/,
   )
 })
 
-test('selectCards should be idempotent for same player selection in same round', () => {
+test('selectCards should be idempotent for same player selection in same round', async () => {
   const { service, roomRepository } = createServiceFixture()
   const players = createPlayers()
   const gameState = createInitialGameState(players)
@@ -128,12 +141,12 @@ test('selectCards should be idempotent for same player selection in same round',
     createdAt: Date.now(),
   })
 
-  const snapshot = service.selectCards(players[0], 'room-3b', 1, [0, 1])
+  const snapshot = await service.selectCards(players[0], 'room-3b', 1, [0, 1])
   assert.ok(snapshot)
   assert.equal(snapshot.currentRound, 1)
 })
 
-test('selectCards should return latest snapshot for stale past round payload', () => {
+test('selectCards should return latest snapshot for stale past round payload', async () => {
   const { service, roomRepository } = createServiceFixture()
   const players = createPlayers()
   const gameState = createInitialGameState(players)
@@ -149,13 +162,13 @@ test('selectCards should return latest snapshot for stale past round payload', (
     createdAt: Date.now(),
   })
 
-  const snapshot = service.selectCards(players[0], 'room-3c', 1, [0, 1])
+  const snapshot = await service.selectCards(players[0], 'room-3c', 1, [0, 1])
   assert.ok(snapshot)
   assert.equal(snapshot.currentRound, 2)
 })
 
-test('selectCards should release room.gameState after final round', () => {
-  const { service, roomRepository, perPlayerBroadcastCalls } = createServiceFixture()
+test('selectCards should release room.gameState after final round', async () => {
+  const { service, roomRepository, perPlayerBroadcastCalls, battleRecordCalls } = createServiceFixture()
   const players = createPlayers()
   const gameState = createInitialGameState(players)
   gameState.currentRound = gameState.maxRounds
@@ -174,7 +187,7 @@ test('selectCards should release room.gameState after final round', () => {
     createdAt: Date.now(),
   })
 
-  const snapshot = service.selectCards(players[0], 'room-4', gameState.maxRounds, [0, 1])
+  const snapshot = await service.selectCards(players[0], 'room-4', gameState.maxRounds, [0, 1])
   const room = roomRepository.get('room-4')
   const gameEndedEvents = perPlayerBroadcastCalls.filter((entry) => entry.event === 'gameEnded')
 
@@ -185,9 +198,13 @@ test('selectCards should release room.gameState after final round', () => {
   assert.equal(room.finalScores.length, 3)
   assert.equal(gameEndedEvents.length, 3)
   assert.ok(gameEndedEvents.every((entry) => entry.payload.gameState))
+  assert.equal(battleRecordCalls.length, 1)
+  assert.equal(battleRecordCalls[0].roomId, 'room-4')
+  assert.equal(Array.isArray(battleRecordCalls[0].finalScores), true)
+  assert.equal(battleRecordCalls[0].finalScores.length, 3)
 })
 
-test('selectCards should broadcast gameStateUpdated while waiting other players', () => {
+test('selectCards should broadcast gameStateUpdated while waiting other players', async () => {
   const { service, roomRepository, perPlayerBroadcastCalls } = createServiceFixture()
   const players = createPlayers()
   const gameState = createInitialGameState(players)
@@ -202,7 +219,7 @@ test('selectCards should broadcast gameStateUpdated while waiting other players'
     createdAt: Date.now(),
   })
 
-  service.selectCards(players[0], 'room-5', 1, [0, 1])
+  await service.selectCards(players[0], 'room-5', 1, [0, 1])
   const gameStateUpdatedEvents = perPlayerBroadcastCalls.filter((entry) => entry.event === 'gameStateUpdated')
 
   assert.equal(gameStateUpdatedEvents.length, 3)
@@ -225,7 +242,7 @@ test('round timeout should auto select pending players and resolve round', async
     createdAt: Date.now(),
   })
 
-  service.startGame(players[0], 'room-timeout')
+  await service.startGame(players[0], 'room-timeout')
   await new Promise((resolve) => setTimeout(resolve, 120))
 
   const roundResultEvents = perPlayerBroadcastCalls.filter((entry) => entry.event === 'roundResult')

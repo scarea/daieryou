@@ -1,10 +1,39 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Input, List, Modal, Space, Tag, Typography, message } from 'antd'
+import { Button, Card, Input, List, Modal, Pagination, Select, Space, Tag, Typography, message } from 'antd'
 import { PlusOutlined, UserOutlined } from '@ant-design/icons'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import useGameStore from '../store/gameStore'
 
 const { Title, Text } = Typography
+const DEFAULT_BATTLE_STATS_LIMIT = 20
+
+function normalizeDateInputValue(timestamp) {
+  const value = Number(timestamp)
+  if (!Number.isFinite(value) || value <= 0) {
+    return ''
+  }
+
+  const date = new Date(value)
+  const year = String(date.getFullYear())
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseDateInputToTimestamp(dateText, { endOfDay = false } = {}) {
+  if (typeof dateText !== 'string' || !dateText.trim()) {
+    return null
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText.trim())) {
+    return Number.NaN
+  }
+
+  const suffix = endOfDay
+    ? 'T23:59:59.999'
+    : 'T00:00:00.000'
+  const parsed = Date.parse(`${dateText.trim()}${suffix}`)
+  return Number.isFinite(parsed) ? parsed : Number.NaN
+}
 
 const RoomScene = () => {
   const {
@@ -21,6 +50,13 @@ const RoomScene = () => {
     adminListInviteCodes,
     adminDisableInviteCode,
     adminInviteCodes,
+    adminListAuditLogs,
+    adminAuditLogs,
+    fetchBattleStats,
+    battleStatsSummary,
+    battleStatsRecords,
+    battleStatsPagination,
+    battleStatsFilters,
     joinRoom,
     leaveRoom,
     getRoomList,
@@ -39,6 +75,12 @@ const RoomScene = () => {
   const [memberLoading, setMemberLoading] = useState(false)
   const [adminGrantLoading, setAdminGrantLoading] = useState(false)
   const [adminInviteLoading, setAdminInviteLoading] = useState(false)
+  const [adminAuditLoading, setAdminAuditLoading] = useState(false)
+  const [battleStatsLoading, setBattleStatsLoading] = useState(false)
+  const [battleRoomIdFilter, setBattleRoomIdFilter] = useState('')
+  const [battleRankFilter, setBattleRankFilter] = useState('all')
+  const [battleStartDateFilter, setBattleStartDateFilter] = useState('')
+  const [battleEndDateFilter, setBattleEndDateFilter] = useState('')
   const [adminTargetEmail, setAdminTargetEmail] = useState('')
   const [adminDurationDays, setAdminDurationDays] = useState(String(authConfig?.memberDefaultDays || 30))
   const [adminReason, setAdminReason] = useState('')
@@ -56,6 +98,39 @@ const RoomScene = () => {
       }).catch(() => {})
     }
   }, [accountInfo?.isAdmin, authConfig?.adminInviteListLimit, adminInviteCodes.length, adminListInviteCodes])
+
+  useEffect(() => {
+    if (accountInfo?.isAdmin === true && adminAuditLogs.length === 0) {
+      adminListAuditLogs({
+        limit: authConfig?.adminAuditListLimit,
+      }).catch(() => {})
+    }
+  }, [accountInfo?.isAdmin, authConfig?.adminAuditListLimit, adminAuditLogs.length, adminListAuditLogs])
+
+  useEffect(() => {
+    if (!currentRoom && user?.id && battleStatsRecords.length === 0) {
+      fetchBattleStats({
+        limit: DEFAULT_BATTLE_STATS_LIMIT,
+        page: 1,
+      }).catch(() => {})
+    }
+  }, [currentRoom, user?.id, battleStatsRecords.length, fetchBattleStats])
+
+  useEffect(() => {
+    setBattleRoomIdFilter(battleStatsFilters?.roomId || '')
+    setBattleRankFilter(
+      battleStatsFilters?.rank == null
+        ? 'all'
+        : String(battleStatsFilters.rank),
+    )
+    setBattleStartDateFilter(normalizeDateInputValue(battleStatsFilters?.startTime))
+    setBattleEndDateFilter(normalizeDateInputValue(battleStatsFilters?.endTime))
+  }, [
+    battleStatsFilters?.roomId,
+    battleStatsFilters?.rank,
+    battleStatsFilters?.startTime,
+    battleStatsFilters?.endTime,
+  ])
 
   useEffect(() => {
     const nextDefaultDays = String(authConfig?.memberDefaultDays || 30)
@@ -226,6 +301,135 @@ const RoomScene = () => {
     })
   }
 
+  const handleAdminListAuditLogs = async () => {
+    setAdminAuditLoading(true)
+    try {
+      await adminListAuditLogs({
+        limit: authConfig?.adminAuditListLimit,
+      })
+    } catch (error) {
+      message.error(error.message || '加载审计日志失败')
+    } finally {
+      setAdminAuditLoading(false)
+    }
+  }
+
+  const buildBattleStatsQuery = ({
+    page = battleStatsPagination?.page || 1,
+    limit = battleStatsPagination?.limit || DEFAULT_BATTLE_STATS_LIMIT,
+  } = {}) => {
+    const roomId = battleRoomIdFilter.trim()
+    const rank = battleRankFilter === 'all' ? null : Number(battleRankFilter)
+    const startTime = parseDateInputToTimestamp(battleStartDateFilter, { endOfDay: false })
+    const endTime = parseDateInputToTimestamp(battleEndDateFilter, { endOfDay: true })
+
+    if (battleStartDateFilter && !Number.isFinite(startTime)) {
+      message.error('开始日期格式无效')
+      return null
+    }
+    if (battleEndDateFilter && !Number.isFinite(endTime)) {
+      message.error('结束日期格式无效')
+      return null
+    }
+    if (
+      Number.isFinite(startTime)
+      && Number.isFinite(endTime)
+      && startTime > endTime
+    ) {
+      message.error('开始日期不能晚于结束日期')
+      return null
+    }
+
+    return {
+      page,
+      limit,
+      roomId: roomId || undefined,
+      rank: Number.isFinite(rank) && rank > 0 ? rank : undefined,
+      startTime: Number.isFinite(startTime) ? startTime : undefined,
+      endTime: Number.isFinite(endTime) ? endTime : undefined,
+    }
+  }
+
+  const handleRefreshBattleStats = async () => {
+    const query = buildBattleStatsQuery()
+    if (!query) {
+      return
+    }
+
+    setBattleStatsLoading(true)
+    try {
+      await fetchBattleStats(query)
+    } catch (error) {
+      message.error(error.message || '加载战绩失败')
+    } finally {
+      setBattleStatsLoading(false)
+    }
+  }
+
+  const handleSearchBattleStats = async () => {
+    const query = buildBattleStatsQuery({
+      page: 1,
+      limit: battleStatsPagination?.limit || DEFAULT_BATTLE_STATS_LIMIT,
+    })
+    if (!query) {
+      return
+    }
+
+    setBattleStatsLoading(true)
+    try {
+      await fetchBattleStats(query)
+    } catch (error) {
+      message.error(error.message || '查询战绩失败')
+    } finally {
+      setBattleStatsLoading(false)
+    }
+  }
+
+  const handleResetBattleStatsFilters = async () => {
+    const resetFilters = {
+      roomId: '',
+      rank: 'all',
+      startDate: '',
+      endDate: '',
+    }
+
+    setBattleRoomIdFilter(resetFilters.roomId)
+    setBattleRankFilter(resetFilters.rank)
+    setBattleStartDateFilter(resetFilters.startDate)
+    setBattleEndDateFilter(resetFilters.endDate)
+
+    setBattleStatsLoading(true)
+    try {
+      await fetchBattleStats({
+        page: 1,
+        limit: battleStatsPagination?.limit || DEFAULT_BATTLE_STATS_LIMIT,
+      })
+    } catch (error) {
+      message.error(error.message || '重置战绩筛选失败')
+    } finally {
+      setBattleStatsLoading(false)
+    }
+  }
+
+  const handleBattleStatsPageChange = async (page, pageSize) => {
+    const query = buildBattleStatsQuery({
+      page,
+      limit: pageSize || battleStatsPagination?.limit || DEFAULT_BATTLE_STATS_LIMIT,
+    })
+    if (!query) {
+      return
+    }
+
+    setBattleStatsLoading(true)
+    try {
+      await fetchBattleStats(query)
+    } catch (error) {
+      message.error(error.message || '分页加载战绩失败')
+    } finally {
+      setBattleStatsLoading(false)
+    }
+  }
+
   if (currentRoom) {
     const isHost = currentRoom.hostId === user?.id
     const isWaiting = currentRoom.status === 'waiting'
@@ -376,6 +580,111 @@ const RoomScene = () => {
         </section>
       )}
 
+      <section className="scene-section">
+        <Title level={4} className="scene-section-title">战绩总览</Title>
+        <Space size={8} wrap style={{ marginBottom: 12 }}>
+          <Tag color="blue">总局数: {battleStatsSummary?.totalGames || 0}</Tag>
+          <Tag color="green">胜场: {battleStatsSummary?.winCount || 0}</Tag>
+          <Tag color="purple">
+            胜率: {Number.isFinite(battleStatsSummary?.winRate)
+              ? `${Math.round((battleStatsSummary.winRate || 0) * 100)}%`
+              : '0%'}
+          </Tag>
+          <Tag color={(battleStatsSummary?.totalScoreChange || 0) >= 0 ? 'gold' : 'red'}>
+            总分变化: {(battleStatsSummary?.totalScoreChange || 0) > 0 ? '+' : ''}{battleStatsSummary?.totalScoreChange || 0}
+          </Tag>
+          <Tag color="cyan">筛选命中: {battleStatsPagination?.total || 0}</Tag>
+        </Space>
+        <Space size={8} wrap style={{ marginBottom: 12 }}>
+          <Input
+            placeholder="房间ID筛选"
+            value={battleRoomIdFilter}
+            style={{ width: 180 }}
+            onChange={(event) => setBattleRoomIdFilter(event.target.value)}
+          />
+          <Select
+            value={battleRankFilter}
+            style={{ width: 130 }}
+            options={[
+              { value: 'all', label: '全部名次' },
+              { value: '1', label: '第 1 名' },
+              { value: '2', label: '第 2 名' },
+              { value: '3', label: '第 3 名' },
+            ]}
+            onChange={setBattleRankFilter}
+          />
+          <Input
+            type="date"
+            value={battleStartDateFilter}
+            style={{ width: 150 }}
+            onChange={(event) => setBattleStartDateFilter(event.target.value)}
+          />
+          <Input
+            type="date"
+            value={battleEndDateFilter}
+            style={{ width: 150 }}
+            onChange={(event) => setBattleEndDateFilter(event.target.value)}
+          />
+          <Button
+            className="scene-primary-btn"
+            loading={battleStatsLoading}
+            onClick={handleSearchBattleStats}
+          >
+            查询
+          </Button>
+          <Button
+            className="scene-subtle-btn"
+            loading={battleStatsLoading}
+            onClick={handleResetBattleStatsFilters}
+          >
+            重置
+          </Button>
+          <Button
+            className="scene-subtle-btn"
+            loading={battleStatsLoading}
+            onClick={handleRefreshBattleStats}
+          >
+            刷新战绩
+          </Button>
+        </Space>
+        <List
+          size="small"
+          loading={battleStatsLoading}
+          dataSource={battleStatsRecords}
+          locale={{ emptyText: '暂无对局记录' }}
+          renderItem={(record) => (
+            <List.Item>
+              <Space size={10} wrap>
+                <Tag color={record.rank === 1 ? 'gold' : record.rank === 2 ? 'blue' : 'default'}>
+                  第 {record.rank} 名
+                </Tag>
+                <Tag color={record.totalScore >= 0 ? 'green' : 'red'}>
+                  分差 {record.totalScore > 0 ? '+' : ''}{record.totalScore}
+                </Tag>
+                <Text type="secondary">
+                  对手: {Array.isArray(record.opponents) && record.opponents.length > 0
+                    ? record.opponents.map((item) => item.username).join(' / ')
+                    : '-'}
+                </Text>
+                <Text type="secondary">
+                  时间：{record.finishedAt ? new Date(record.finishedAt).toLocaleString() : '-'}
+                </Text>
+              </Space>
+            </List.Item>
+          )}
+        />
+        <Pagination
+          size="small"
+          style={{ marginTop: 12 }}
+          current={battleStatsPagination?.page || 1}
+          pageSize={battleStatsPagination?.limit || DEFAULT_BATTLE_STATS_LIMIT}
+          total={battleStatsPagination?.total || 0}
+          showSizeChanger={false}
+          disabled={battleStatsLoading}
+          onChange={handleBattleStatsPageChange}
+        />
+      </section>
+
       {accountInfo?.isAdmin === true && (
         <section className="scene-section">
           <Title level={4} className="scene-section-title">管理台（最小版）</Title>
@@ -416,6 +725,13 @@ const RoomScene = () => {
               >
                 刷新邀请码列表
               </Button>
+              <Button
+                className="scene-subtle-btn"
+                loading={adminAuditLoading}
+                onClick={handleAdminListAuditLogs}
+              >
+                刷新审计日志
+              </Button>
             </Space>
           </Space>
           <List
@@ -450,6 +766,26 @@ const RoomScene = () => {
                   {inviteCode.disabledReason && (
                     <Text type="secondary">禁用原因：{inviteCode.disabledReason}</Text>
                   )}
+                </Space>
+              </List.Item>
+            )}
+          />
+
+          <List
+            size="small"
+            style={{ marginTop: 12 }}
+            dataSource={adminAuditLogs}
+            locale={{ emptyText: '暂无审计日志' }}
+            renderItem={(log) => (
+              <List.Item>
+                <Space size={10} wrap>
+                  <Tag color="blue">{log.action}</Tag>
+                  <Text type="secondary">actor: {log.actorEmail || log.actorUserId || '-'}</Text>
+                  <Text type="secondary">target: {log.targetEmail || log.targetUserId || '-'}</Text>
+                  <Text type="secondary">source: {log.source || 'system'}</Text>
+                  <Text type="secondary">
+                    时间：{log.createdAt ? new Date(log.createdAt).toLocaleString() : '-'}
+                  </Text>
                 </Space>
               </List.Item>
             )}

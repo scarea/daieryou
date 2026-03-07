@@ -14,7 +14,7 @@ class Handler {
    */
   async createRoom(msg, session, next) {
     try {
-      const room = appContext.roomService.createRoom(session.get('user'))
+      const room = await appContext.roomService.createRoom(session.get('user'))
       next(null, { code: 200, data: { room } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : 400
@@ -27,7 +27,7 @@ class Handler {
    */
   async joinRoom(msg, session, next) {
     try {
-      const room = appContext.roomService.joinRoom(session.get('user'), msg.roomId)
+      const room = await appContext.roomService.joinRoom(session.get('user'), msg.roomId)
       next(null, { code: 200, data: { room } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '房间不存在' ? 404 : 400
@@ -40,7 +40,7 @@ class Handler {
    */
   async leaveRoom(msg, session, next) {
     try {
-      appContext.roomService.leaveRoom(session.get('user'), msg.roomId)
+      await appContext.roomService.leaveRoom(session.get('user'), msg.roomId)
       next(null, { code: 200, data: { success: true } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '房间不存在' ? 404 : 400
@@ -67,8 +67,8 @@ class Handler {
   /**
    * 清理用户的房间状态
    */
-  cleanupUserFromRooms(userId) {
-    appContext.roomService.cleanupUserFromRooms(userId)
+  async cleanupUserFromRooms(userId) {
+    await appContext.roomService.cleanupUserFromRooms(userId)
   }
 }
 
