@@ -850,7 +850,20 @@ const useGameStore = create((set, get) => ({
   exitCurrentRoom: async () => {
     const { currentRoom } = get()
     if (currentRoom) {
-      await get().leaveRoom()
+      try {
+        await get().leaveRoom()
+      } catch (error) {
+        console.error('离开房间失败:', error)
+        // 即使离开房间失败，也清理本地状态
+        set({
+          currentRoom: null,
+          gameState: null,
+          finalScores: null,
+          finalRoundResult: null,
+          latestRoundResult: null,
+          gameAlert: null,
+        })
+      }
       return
     }
 
