@@ -195,6 +195,7 @@ class AuthService {
       room: serializeRoom(room),
       gameState: room?.gameState ? getPublicGameState(room.gameState, user.id) : null,
       finalScores: room?.finalScores || null,
+      finalRoundResult: room?.finalRoundResult || null,
       rooms: this.lobbyBroadcaster.buildRoomList(),
       resumed: Boolean(room),
       sessionToken: nextSessionToken,

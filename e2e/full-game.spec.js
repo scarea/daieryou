@@ -6,10 +6,18 @@ const { test, expect } = require('@playwright/test')
 const ROOT_DIR = path.resolve(__dirname, '..')
 const SERVER_DIR = path.join(ROOT_DIR, 'server')
 const CLIENT_DIR = path.join(ROOT_DIR, 'client')
-const APP_URL = 'http://127.0.0.1:3000'
+const WS_PORT = 3314
+const CLIENT_PORT = 3400
+const APP_URL = `http://127.0.0.1:${CLIENT_PORT}`
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function normalizeCardName(value) {
+  return String(value || '')
+    .replace(/\s+/g, '')
+    .trim()
 }
 
 function waitForHttp(url, timeoutMs = 20000) {
@@ -117,7 +125,7 @@ async function dismissRoundModalIfVisible(page) {
     .catch(() => false)
 
   if (visible) {
-    await continueButton.click()
+    await continueButton.click({ timeout: 1200, force: true }).catch(() => {})
   }
 }
 
@@ -128,13 +136,81 @@ async function drainRoundModal(page) {
   }
 }
 
+async function assertRoundResultScoreDisplay(page) {
+  const continueButton = page.getByTestId('round-result-continue')
+  await expect(continueButton).toBeVisible()
+
+  const secondPlaceCard = page
+    .locator('.round-result-player-card')
+    .filter({ has: page.locator('.round-result-rank-badge', { hasText: '次名' }) })
+    .first()
+  const thirdPlaceCard = page
+    .locator('.round-result-player-card')
+    .filter({ has: page.locator('.round-result-rank-badge', { hasText: '末位' }) })
+    .first()
+
+  await expect(secondPlaceCard.locator('.score-change-pill')).toContainText('-', { timeout: 3000 })
+  await expect(thirdPlaceCard.locator('.score-change-pill')).toContainText('+', { timeout: 3000 })
+}
+
+async function assertFinalRoundReveal(page) {
+  const finalRevealCard = page.locator('.result-final-reveal-card')
+  await expect(finalRevealCard).toBeVisible()
+  await expect(finalRevealCard.locator('.round-result-player-card')).toHaveCount(3)
+}
+
+async function readHandCardNames(page) {
+  const cards = page.locator('[data-testid^="hand-card-"] .card-content')
+  const count = await cards.count()
+  const names = []
+  for (let index = 0; index < count; index += 1) {
+    const raw = await cards.nth(index).textContent()
+    const normalized = normalizeCardName(raw)
+    if (normalized) {
+      names.push(normalized)
+    }
+  }
+  return names
+}
+
+async function assertNoReusedCardsInHand(page, globallyPlayedCards) {
+  const currentHandCards = await readHandCardNames(page)
+  currentHandCards.forEach((cardName) => {
+    expect(
+      globallyPlayedCards.has(cardName),
+      `card ${cardName} should not reappear in any player hand after being played`,
+    ).toBeFalsy()
+  })
+}
+
+async function assertViewportNoPageScroll(page) {
+  const metrics = await page.evaluate(() => ({
+    verticalOverflow: document.documentElement.scrollHeight - window.innerHeight,
+    horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+  }))
+
+  expect(
+    metrics.verticalOverflow <= 2,
+    `page should fit viewport without vertical scroll, overflow=${metrics.verticalOverflow}`,
+  ).toBeTruthy()
+  expect(
+    metrics.horizontalOverflow <= 2,
+    `page should fit viewport without horizontal scroll, overflow=${metrics.horizontalOverflow}`,
+  ).toBeTruthy()
+}
+
 async function submitRoundCards(page) {
   await drainRoundModal(page)
   await expect(page.getByTestId('confirm-selection-button')).toBeVisible()
+  const selectedCardNames = [
+    normalizeCardName(await page.getByTestId('hand-card-0').textContent()),
+    normalizeCardName(await page.getByTestId('hand-card-1').textContent()),
+  ].filter(Boolean)
   await page.getByTestId('hand-card-0').click()
   await page.getByTestId('hand-card-1').click()
   await expect(page.getByTestId('confirm-selection-button')).toContainText('(2/2)')
   await page.getByTestId('confirm-selection-button').click()
+  return selectedCardNames
 }
 
 let serverProcess
@@ -146,15 +222,19 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       DAIERYOU_SKIP_MONGO: '1',
+      DAIERYOU_WS_PORT: String(WS_PORT),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
   await waitForServerLog(serverProcess, 'WebSocket 服务器启动成功')
 
-  clientProcess = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '3000'], {
+  clientProcess = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(CLIENT_PORT)], {
     cwd: CLIENT_DIR,
-    env: process.env,
+    env: {
+      ...process.env,
+      VITE_WS_URL: `ws://127.0.0.1:${WS_PORT}`,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -193,24 +273,39 @@ test('three players should finish one game and restart in same room', async ({ b
 
     await playerCPage.locator('[data-testid^="join-room-"]').first().click()
     await expect(playerCPage.getByText('玩家列表 (3/3)')).toBeVisible()
+    await expect(hostPage.getByText('玩家列表 (3/3)')).toBeVisible()
 
-    await hostPage.getByTestId('start-game-button').click()
+    const startGameButton = hostPage.getByTestId('start-game-button')
+    await expect(startGameButton).toBeEnabled()
+    await startGameButton.click()
     await Promise.all(
       pages.map((page) => expect(page.getByTestId('round-indicator')).toContainText('第 1 / 5 轮')),
     )
+    await assertViewportNoPageScroll(hostPage)
 
-    for (let round = 1; round <= 5; round += 1) {
+    const globallyPlayedCards = new Set()
+
+    for (let round = 1; round <= 4; round += 1) {
       for (const page of pages) {
-        await submitRoundCards(page)
+        await assertNoReusedCardsInHand(page, globallyPlayedCards)
+        const selectedCardNames = await submitRoundCards(page)
+        selectedCardNames.forEach((cardName) => globallyPlayedCards.add(cardName))
       }
 
+      if (round < 4) {
+        await assertRoundResultScoreDisplay(hostPage)
+      }
       await Promise.all(pages.map((page) => drainRoundModal(page)))
 
-      if (round < 5) {
+      if (round < 4) {
+        await assertViewportNoPageScroll(hostPage)
         await expect(hostPage.getByTestId('round-indicator')).toContainText(`第 ${round + 1} / 5 轮`)
       }
     }
 
+    await Promise.all(pages.map((page) => assertFinalRoundReveal(page)))
+    await Promise.all(pages.map((page) => expect(page.getByTestId('final-reveal-continue-button')).toBeVisible()))
+    await Promise.all(pages.map((page) => page.getByTestId('final-reveal-continue-button').click()))
     await Promise.all(pages.map((page) => expect(page.getByText('游戏结束')).toBeVisible()))
 
     await hostPage.getByTestId('play-again-button').click()

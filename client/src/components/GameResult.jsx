@@ -1,12 +1,21 @@
 import React from 'react'
 import { Card, Typography, Space, Button, Table, Tag } from 'antd'
 import { TrophyOutlined, CrownOutlined, MehOutlined } from '@ant-design/icons'
+import CardComponent from './Card'
+import { getHandTypeName } from '../utils/cardUtils'
 
 const { Title, Text } = Typography
 
 const rankColors = ['#ffd15a', '#bac2d0', '#c58646']
 
-const GameResult = ({ finalScores, onBackToRoom, onPlayAgain, playAgainDisabled = false, playAgainText = '再来一局' }) => {
+const GameResult = ({
+  finalScores,
+  finalRoundResult = null,
+  onBackToRoom,
+  onPlayAgain,
+  playAgainDisabled = false,
+  playAgainText = '再来一局',
+}) => {
   const sortedScores = [...finalScores].sort((a, b) => b.totalScore - a.totalScore)
 
   const getRankIcon = (index) => {
@@ -110,6 +119,40 @@ const GameResult = ({ finalScores, onBackToRoom, onPlayAgain, playAgainDisabled 
           scroll={{ x: 760 }}
         />
       </Card>
+
+      {finalRoundResult && Array.isArray(finalRoundResult.playerResults) && finalRoundResult.playerResults.length > 0 && (
+        <Card className="scene-card result-final-reveal-card" title={`第 ${finalRoundResult.round} 轮亮牌`}>
+          <div className="round-result-grid">
+            {finalRoundResult.playerResults.map((result) => (
+              <Card
+                key={`${result.playerIndex}-${result.playerName}`}
+                className={`scene-card round-result-player-card rank-${result.rank}`.trim()}
+                size="small"
+              >
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <div className="round-result-player-head">
+                    <Text strong className="round-result-player-name">
+                      {result.playerName || `玩家${result.playerIndex + 1}`}
+                    </Text>
+                  </div>
+
+                  <div className="round-result-hand-cards">
+                    {result.hand.map((card, cardIndex) => (
+                      <CardComponent key={cardIndex} card={card} size="sm" reveal />
+                    ))}
+                  </div>
+
+                  <div className="round-result-type-tag">
+                    <Tag color={result.rank === 2 ? 'red' : 'green'}>
+                      {getHandTypeName(result.evaluation.type)}
+                    </Tag>
+                  </div>
+                </Space>
+              </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="scene-card result-action-card">
         <div className="result-action-row">

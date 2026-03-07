@@ -6,7 +6,9 @@ const { test, expect } = require('@playwright/test')
 const ROOT_DIR = path.resolve(__dirname, '..')
 const SERVER_DIR = path.join(ROOT_DIR, 'server')
 const CLIENT_DIR = path.join(ROOT_DIR, 'client')
-const APP_URL = 'http://127.0.0.1:3000'
+const WS_PORT = 3315
+const CLIENT_PORT = 3401
+const APP_URL = `http://127.0.0.1:${CLIENT_PORT}`
 
 function waitForHttp(url, timeoutMs = 20000) {
   const startedAt = Date.now()
@@ -115,6 +117,7 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       DAIERYOU_SKIP_MONGO: '1',
+      DAIERYOU_WS_PORT: String(WS_PORT),
       DAIERYOU_DISCONNECT_GRACE_MS: '1800',
       DAIERYOU_ROOM_SWEEP_INTERVAL_MS: '200',
       DAIERYOU_OFFLINE_WAITING_ROOM_TTL_MS: '900',
@@ -125,9 +128,12 @@ test.beforeAll(async () => {
 
   await waitForServerLog(serverProcess, 'WebSocket 服务器启动成功')
 
-  clientProcess = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '3000'], {
+  clientProcess = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(CLIENT_PORT)], {
     cwd: CLIENT_DIR,
-    env: process.env,
+    env: {
+      ...process.env,
+      VITE_WS_URL: `ws://127.0.0.1:${WS_PORT}`,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 

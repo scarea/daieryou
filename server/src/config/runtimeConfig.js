@@ -1,4 +1,5 @@
 const runtimeConfig = require('../../config/runtime-config.json')
+const { DEFAULT_BOT_LLM_SYSTEM_PROMPT } = require('../application/bot/prompts')
 
 function parsePositiveNumber(value, fallbackValue) {
   const parsed = Number(value)
@@ -53,6 +54,8 @@ function loadRuntimeConfig(env = process.env) {
   const session = runtimeConfig.session || {}
   const roomLifecycle = runtimeConfig.roomLifecycle || {}
   const battleRecordLifecycle = runtimeConfig.battleRecordLifecycle || {}
+  const bot = runtimeConfig.bot || {}
+  const botLlm = bot.llm || {}
   const game = runtimeConfig.game || {}
   const roomRepository = runtimeConfig.roomRepository || {}
   const roomMirror = runtimeConfig.roomMirror || {}
@@ -137,6 +140,50 @@ function loadRuntimeConfig(env = process.env) {
         env.DAIERYOU_BATTLE_RECORD_ARCHIVE_BEFORE_CLEANUP,
         battleRecordLifecycle.archiveBeforeCleanup ?? true,
       ),
+    },
+    bot: {
+      enabled: parseBoolean(
+        env.DAIERYOU_BOT_ENABLED,
+        bot.enabled ?? false,
+      ),
+      provider: parseNonEmptyString(
+        env.DAIERYOU_BOT_PROVIDER,
+        bot.provider || 'rule',
+      ).toLowerCase(),
+      maxPerRoom: parsePositiveNumber(
+        env.DAIERYOU_BOT_MAX_PER_ROOM,
+        bot.maxPerRoom || 2,
+      ),
+      decisionTimeoutMs: parsePositiveNumber(
+        env.DAIERYOU_BOT_DECISION_TIMEOUT_MS,
+        bot.decisionTimeoutMs || 120,
+      ),
+      defaultDifficulty: parseNonEmptyString(
+        env.DAIERYOU_BOT_DEFAULT_DIFFICULTY,
+        bot.defaultDifficulty || 'normal',
+      ).toLowerCase(),
+      llm: {
+        enabled: parseBoolean(
+          env.DAIERYOU_BOT_LLM_ENABLED,
+          botLlm.enabled ?? false,
+        ),
+        endpoint: parseNonEmptyString(
+          env.DAIERYOU_BOT_LLM_ENDPOINT,
+          botLlm.endpoint || 'https://api.openai.com/v1',
+        ),
+        apiKey: parseNonEmptyString(
+          env.DAIERYOU_BOT_LLM_API_KEY,
+          botLlm.apiKey || '',
+        ),
+        modelName: parseNonEmptyString(
+          env.DAIERYOU_BOT_LLM_MODEL_NAME,
+          botLlm.modelName || 'gpt-4o-mini',
+        ),
+        systemPrompt: parseNonEmptyString(
+          env.DAIERYOU_BOT_LLM_SYSTEM_PROMPT,
+          botLlm.systemPrompt || DEFAULT_BOT_LLM_SYSTEM_PROMPT,
+        ),
+      },
     },
     game: {
       roundSelectionTimeoutMs: parsePositiveNumber(

@@ -75,9 +75,13 @@ function roomToListItem(room) {
     id: room.id,
     playerCount: room.players.length,
     onlineCount: room.players.filter((player) => player.online !== false).length,
+    botCount: room.players.filter((player) => player.isBot === true).length,
     status: room.status,
     hostId: room.hostId,
     createdAt: room.createdAt,
+    selectionTimeoutMs: Number.isInteger(room.selectionTimeoutMs) && room.selectionTimeoutMs > 0
+      ? room.selectionTimeoutMs
+      : undefined,
   }
 }
 
@@ -132,6 +136,14 @@ function isCurrentRoomEvent(state, room) {
   return state.currentRoom.id === room.id
 }
 
+function getFinalRoundResultFromGameState(gameState) {
+  if (!Array.isArray(gameState?.roundResults) || gameState.roundResults.length === 0) {
+    return null
+  }
+
+  return gameState.roundResults[gameState.roundResults.length - 1] || null
+}
+
 function scheduleReconnect(set, get) {
   if (reconnectTimer) {
     return
@@ -177,6 +189,7 @@ function scheduleReconnect(set, get) {
           currentRoom: null,
           gameState: null,
           finalScores: null,
+          finalRoundResult: null,
           latestRoundResult: null,
           battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
           battleStatsRecords: [],
@@ -230,6 +243,7 @@ function bindRealtimeEvents(set, get) {
         currentRoom: nextCurrentRoom,
         gameState: leavingCurrentRoom ? null : state.gameState,
         finalScores: leavingCurrentRoom ? null : state.finalScores,
+        finalRoundResult: leavingCurrentRoom ? null : state.finalRoundResult,
         latestRoundResult: leavingCurrentRoom ? null : state.latestRoundResult,
         roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
       }
@@ -254,6 +268,7 @@ function bindRealtimeEvents(set, get) {
       currentRoom: room || state.currentRoom,
       gameState,
       finalScores: null,
+      finalRoundResult: null,
       latestRoundResult: null,
       roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
       gameAlert: null,
@@ -272,18 +287,28 @@ function bindRealtimeEvents(set, get) {
   })
 
   realtimeClient.on('roundResult', ({ room, roundResult, gameState }) => {
-    set((state) => ({
-      currentRoom: room || state.currentRoom,
-      latestRoundResult: roundResult,
-      gameState,
-      roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
-    }))
+    set((state) => {
+      const maxRounds = Number(gameState?.maxRounds || state.gameState?.maxRounds || 0)
+      const isFinalRoundResult = Number(roundResult?.round || 0) === maxRounds && maxRounds > 0
+
+      return {
+        currentRoom: room || state.currentRoom,
+        latestRoundResult: roundResult,
+        finalRoundResult: isFinalRoundResult ? roundResult : state.finalRoundResult,
+        gameState,
+        roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
+      }
+    })
   })
 
-  realtimeClient.on('gameEnded', ({ room, finalScores, gameState }) => {
+  realtimeClient.on('gameEnded', ({ room, finalScores, finalRoundResult, gameState }) => {
     set((state) => ({
       currentRoom: room || state.currentRoom,
       finalScores,
+      finalRoundResult: finalRoundResult
+        || getFinalRoundResultFromGameState(gameState)
+        || state.finalRoundResult
+        || null,
       gameState,
       roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
     }))
@@ -298,6 +323,7 @@ function bindRealtimeEvents(set, get) {
         currentRoom: nextCurrentRoom,
         gameState: affectsCurrentRoom ? null : state.gameState,
         finalScores: affectsCurrentRoom ? null : state.finalScores,
+        finalRoundResult: affectsCurrentRoom ? null : state.finalRoundResult,
         latestRoundResult: affectsCurrentRoom ? null : state.latestRoundResult,
         roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
         gameAlert: affectsCurrentRoom ? reason : state.gameAlert,
@@ -339,6 +365,7 @@ const useGameStore = create((set, get) => ({
   gameState: null,
   latestRoundResult: null,
   finalScores: null,
+  finalRoundResult: null,
   gameAlert: null,
   accountInfo: null,
   authConfig: DEFAULT_AUTH_CONFIG,
@@ -408,6 +435,7 @@ const useGameStore = create((set, get) => ({
         currentRoom: null,
         gameState: null,
         finalScores: null,
+        finalRoundResult: null,
         battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
         battleStatsRecords: [],
         battleStatsTrend: [],
@@ -462,6 +490,7 @@ const useGameStore = create((set, get) => ({
       currentRoom: payload.room || null,
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
+      finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -484,16 +513,61 @@ const useGameStore = create((set, get) => ({
     return nextUser
   },
 
-  createRoom: async () => {
-    const { room } = await gameService.createRoom()
-    set({ currentRoom: room, gameState: null, finalScores: null, latestRoundResult: null, gameAlert: null })
+  createRoom: async ({ selectionTimeoutMs } = {}) => {
+    const { room } = await gameService.createRoom({ selectionTimeoutMs })
+    set({
+      currentRoom: room,
+      gameState: null,
+      finalScores: null,
+      finalRoundResult: null,
+      latestRoundResult: null,
+      gameAlert: null,
+    })
     return room
   },
 
   joinRoom: async (roomId) => {
     const { room } = await gameService.joinRoom(roomId)
-    set({ currentRoom: room, finalScores: null, latestRoundResult: null, gameAlert: null })
+    set({ currentRoom: room, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
     return room
+  },
+
+  addBots: async ({ roomId, count = 1, difficulty } = {}) => {
+    const targetRoomId = roomId || get().currentRoom?.id
+    if (!targetRoomId) {
+      throw new Error('房间不存在')
+    }
+
+    const payload = await gameService.addBots({
+      roomId: targetRoomId,
+      count,
+      difficulty,
+    })
+    set((state) => ({
+      currentRoom: payload?.room || state.currentRoom,
+      roomList: payload?.room ? syncRoomList(state.roomList, payload.room) : state.roomList,
+    }))
+    return payload
+  },
+
+  removeBot: async ({ roomId, botPlayerId } = {}) => {
+    const targetRoomId = roomId || get().currentRoom?.id
+    if (!targetRoomId) {
+      throw new Error('房间不存在')
+    }
+    if (!botPlayerId) {
+      throw new Error('AI 玩家不存在')
+    }
+
+    const payload = await gameService.removeBot({
+      roomId: targetRoomId,
+      botPlayerId,
+    })
+    set((state) => ({
+      currentRoom: payload?.room || state.currentRoom,
+      roomList: payload?.room ? syncRoomList(state.roomList, payload.room) : state.roomList,
+    }))
+    return payload
   },
 
   leaveRoom: async () => {
@@ -503,7 +577,14 @@ const useGameStore = create((set, get) => ({
     }
 
     await gameService.leaveRoom(currentRoom.id)
-    set({ currentRoom: null, gameState: null, finalScores: null, latestRoundResult: null, gameAlert: null })
+    set({
+      currentRoom: null,
+      gameState: null,
+      finalScores: null,
+      finalRoundResult: null,
+      latestRoundResult: null,
+      gameAlert: null,
+    })
   },
 
   getRoomList: async () => {
@@ -514,13 +595,13 @@ const useGameStore = create((set, get) => ({
 
   startGame: async (roomId) => {
     const { gameState } = await gameService.startGame(roomId)
-    set({ gameState, finalScores: null, latestRoundResult: null, gameAlert: null })
+    set({ gameState, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
     return gameState
   },
 
   restartGame: async (roomId) => {
     const { gameState } = await gameService.restartGame(roomId)
-    set({ gameState, finalScores: null, latestRoundResult: null, gameAlert: null })
+    set({ gameState, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
     return gameState
   },
 
@@ -597,6 +678,7 @@ const useGameStore = create((set, get) => ({
       currentRoom: payload.room || null,
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
+      finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -633,6 +715,7 @@ const useGameStore = create((set, get) => ({
       currentRoom: payload.room || null,
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
+      finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -771,11 +854,18 @@ const useGameStore = create((set, get) => ({
       return
     }
 
-    set({ currentRoom: null, gameState: null, finalScores: null, latestRoundResult: null, gameAlert: null })
+    set({
+      currentRoom: null,
+      gameState: null,
+      finalScores: null,
+      finalRoundResult: null,
+      latestRoundResult: null,
+      gameAlert: null,
+    })
   },
 
   backToLobby: () => {
-    set({ currentRoom: null, gameState: null, finalScores: null, latestRoundResult: null })
+    set({ currentRoom: null, gameState: null, finalScores: null, finalRoundResult: null, latestRoundResult: null })
   },
 }))
 

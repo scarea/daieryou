@@ -41,6 +41,8 @@ function createServiceFixture(options = {}) {
         battleRecordCalls.push(payload)
       },
     },
+    botDecisionService: options.botDecisionService,
+    botDecisionTimeoutMs: options.botDecisionTimeoutMs,
     roundSelectionTimeoutMs: options.roundSelectionTimeoutMs,
   })
   return {
@@ -79,6 +81,28 @@ test('startGame should reject non-host user', async () => {
     () => service.startGame(players[1], 'room-1'),
     /只有房主可以开始游戏/,
   )
+})
+
+test('startGame should use room-level selection timeout when configured', async () => {
+  const { service, roomRepository } = createServiceFixture({
+    roundSelectionTimeoutMs: 30000,
+  })
+  const players = createPlayers()
+
+  roomRepository.save({
+    id: 'room-timeout-config',
+    hostId: players[0].id,
+    status: 'waiting',
+    players,
+    selectionTimeoutMs: 60000,
+    gameState: null,
+    finalScores: null,
+    createdAt: Date.now(),
+  })
+
+  const gameState = await service.startGame(players[0], 'room-timeout-config')
+  assert.equal(gameState.selectionTimeoutMs, 60000)
+  assert.ok(Number.isFinite(gameState.roundDeadlineAt))
 })
 
 test('restartGame should reject unfinished room', async () => {
@@ -196,8 +220,13 @@ test('selectCards should release room.gameState after final round', async () => 
   assert.equal(room.status, 'finished')
   assert.equal(room.gameState, null)
   assert.equal(room.finalScores.length, 3)
+  assert.ok(room.finalRoundResult)
+  assert.equal(room.finalRoundResult.round, gameState.maxRounds)
+  assert.equal(room.finalRoundResult.playerResults.length, 3)
   assert.equal(gameEndedEvents.length, 3)
   assert.ok(gameEndedEvents.every((entry) => entry.payload.gameState))
+  assert.ok(gameEndedEvents.every((entry) => entry.payload.finalRoundResult))
+  assert.ok(gameEndedEvents.every((entry) => entry.payload.finalRoundResult.playerResults.length === 3))
   assert.equal(battleRecordCalls.length, 1)
   assert.equal(battleRecordCalls[0].roomId, 'room-4')
   assert.equal(Array.isArray(battleRecordCalls[0].finalScores), true)
@@ -250,4 +279,140 @@ test('round timeout should auto select pending players and resolve round', async
   assert.ok(roundResultEvents.some((entry) => (
     entry.payload.roundResult.playerResults.some((playerResult) => playerResult.selectedByTimeout === true)
   )))
+})
+
+test('selectCards should apply bot decisions before timeout fallback', async () => {
+  const botDecisionCalls = []
+  const { service, roomRepository, perPlayerBroadcastCalls } = createServiceFixture({
+    botDecisionService: {
+      async decideSelection({ player }) {
+        botDecisionCalls.push(player.id)
+        return {
+          selectedCards: [0, 1],
+          provider: 'rule',
+          latencyMs: 1,
+          fallback: false,
+        }
+      },
+    },
+    botDecisionTimeoutMs: 50,
+  })
+
+  const players = [
+    { id: 'u1', username: 'Host', score: 1000, online: true },
+    { id: 'bot-1', username: 'AI-1', score: 1000, online: true, isBot: true },
+    { id: 'bot-2', username: 'AI-2', score: 1000, online: true, isBot: true },
+  ]
+
+  roomRepository.save({
+    id: 'room-bot-play',
+    hostId: players[0].id,
+    status: 'waiting',
+    players,
+    gameState: null,
+    finalScores: null,
+    createdAt: Date.now(),
+  })
+
+  await service.startGame(players[0], 'room-bot-play')
+  const inGameRoom = roomRepository.get('room-bot-play')
+  assert.equal(
+    inGameRoom.gameState.players.filter((player) => player.isBot).every((player) => player.hasSelected === true),
+    true,
+  )
+
+  await service.selectCards(players[0], 'room-bot-play', 1, [0, 1])
+  const roundResultEvents = perPlayerBroadcastCalls.filter((entry) => entry.event === 'roundResult')
+  assert.ok(roundResultEvents.length >= 3)
+  assert.ok(botDecisionCalls.length >= 2)
+
+  const botSelections = roundResultEvents[0].payload.roundResult.playerResults
+    .filter((playerResult) => String(playerResult.playerName || '').startsWith('AI-'))
+  assert.equal(botSelections.length, 2)
+  assert.equal(botSelections.every((playerResult) => playerResult.selectedByTimeout === false), true)
+})
+
+test('decideCardsForBot should hide round-4 public card from decision input', async () => {
+  let capturedInput = null
+  const { service } = createServiceFixture({
+    botDecisionService: {
+      async decideSelection(input) {
+        capturedInput = input
+        return {
+          selectedCards: [0, 1],
+          provider: 'rule',
+          latencyMs: 1,
+          fallback: false,
+        }
+      },
+    },
+  })
+
+  const botPlayer = {
+    id: 'bot-1',
+    username: 'AI-1',
+    score: 1000,
+    online: true,
+    isBot: true,
+    botDifficulty: 'hard',
+    handCards: [
+      { suit: 'spades', rank: 1 },
+      { suit: 'hearts', rank: 10 },
+      { suit: 'diamonds', rank: 9 },
+      { suit: 'clubs', rank: 6 },
+      { suit: 'spades', rank: 5 },
+    ],
+    totalScore: 0,
+  }
+  const room = {
+    id: 'room-hidden-public',
+    status: 'playing',
+    gameState: {
+      currentRound: 4,
+      maxRounds: 5,
+      publicCards: [
+        { suit: 'spades', rank: 3 },
+        { suit: 'hearts', rank: 8 },
+        { suit: 'diamonds', rank: 11 },
+        { suit: 'clubs', rank: 13 },
+      ],
+      roundResults: [
+        {
+          round: 1,
+          playerResults: [
+            {
+              hand: [
+                { suit: 'hearts', rank: 4 },
+                { suit: 'clubs', rank: 7 },
+                { suit: 'spades', rank: 3 },
+              ],
+            },
+            {
+              hand: [
+                { suit: 'diamonds', rank: 5 },
+                { suit: 'hearts', rank: 6 },
+                { suit: 'spades', rank: 3 },
+              ],
+            },
+          ],
+        },
+      ],
+      players: [
+        { id: 'host', username: 'Host', totalScore: 1 },
+        botPlayer,
+        { id: 'guest', username: 'Guest', totalScore: -1 },
+      ],
+    },
+  }
+
+  const selected = await service.decideCardsForBot(room, botPlayer, 'test')
+
+  assert.deepEqual(selected, [0, 1])
+  assert.ok(capturedInput)
+  assert.equal(capturedInput.round, 4)
+  assert.equal(capturedInput.isPublicCardHidden, true)
+  assert.equal(capturedInput.publicCard, null)
+  assert.equal(capturedInput.knownPublicCards.length, 3)
+  assert.equal(Array.isArray(capturedInput.knownRemovedCards), true)
+  assert.equal(capturedInput.knownRemovedCards.length > 0, true)
 })

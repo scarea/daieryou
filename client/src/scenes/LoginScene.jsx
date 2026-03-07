@@ -14,8 +14,10 @@ import {
   MailOutlined,
   SafetyCertificateOutlined,
   UserOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import useGameStore from '../store/gameStore'
+import GameRules from '../components/GameRules'
 
 const { Title, Text } = Typography
 
@@ -34,6 +36,7 @@ const LoginScene = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
   const [codeCountdown, setCodeCountdown] = useState(0)
+  const [showRules, setShowRules] = useState(false)
 
   const {
     login,
@@ -200,13 +203,22 @@ const LoginScene = ({ onLoginSuccess }) => {
   }
 
   return (
-    <Card className="scene-card" style={{ width: 'min(100%, 520px)' }}>
-      <header className="login-scene-header">
-        <Title level={2} className="scene-hero-title login-scene-title">
-          逮二游
-        </Title>
-        <p className="scene-hero-subtitle">专业账号体系：邮箱注册 + 验证码 + 密码登录</p>
-      </header>
+    <>
+      <Card className="scene-card" style={{ width: 'min(100%, 520px)' }}>
+        <header className="login-scene-header">
+          <Title level={2} className="scene-hero-title login-scene-title">
+            逮二游
+          </Title>
+          <p className="scene-hero-subtitle">专业账号体系：邮箱注册 + 验证码 + 密码登录</p>
+          <Button
+            type="link"
+            icon={<QuestionCircleOutlined />}
+            onClick={() => setShowRules(true)}
+            style={{ padding: 0, height: 'auto' }}
+          >
+            游戏规则
+          </Button>
+        </header>
 
       <Tabs
         defaultActiveKey="guest"
@@ -367,6 +379,9 @@ const LoginScene = ({ onLoginSuccess }) => {
           : '当前环境未开启邮箱登录，仅支持游客快速开始。'}
       </Text>
     </Card>
+
+    <GameRules visible={showRules} onClose={() => setShowRules(false)} />
+  </>
   )
 }
 

@@ -13,6 +13,7 @@ const { AuthService } = require('./authService')
 const { AccountAuthService } = require('./accountAuthService')
 const { BattleRecordService } = require('./battleRecordService')
 const { BattleRecordLifecycleService } = require('./battleRecordLifecycleService')
+const { BotDecisionService } = require('./bot/botDecisionService')
 const { GameService } = require('./gameService')
 const { RoomLifecycleService } = require('./roomLifecycleService')
 const { loadRuntimeConfig } = require('../config/runtimeConfig')
@@ -38,9 +39,19 @@ const roomRepository = new RoomRepository({
   maxInMemoryRooms: runtimeConfig.roomRepository.maxInMemoryRooms,
   primaryMirrorWrites: runtimeConfig.roomMirror.primaryMirrorWrites,
 })
+const botDecisionService = new BotDecisionService({
+  decisionTimeoutMs: runtimeConfig.bot.decisionTimeoutMs,
+  llmConfig: runtimeConfig.bot.llm,
+})
 const broadcaster = new RoomBroadcaster(sessionRepository)
 const lobbyBroadcaster = new LobbyBroadcaster({ sessionRepository, roomRepository })
-const roomService = new RoomService({ roomRepository, broadcaster, lobbyBroadcaster })
+const roomService = new RoomService({
+  roomRepository,
+  broadcaster,
+  lobbyBroadcaster,
+  botConfig: runtimeConfig.bot,
+  defaultRoundSelectionTimeoutMs: runtimeConfig.game.roundSelectionTimeoutMs,
+})
 const battleRecordService = new BattleRecordService({
   battleRecordRepository,
 })
@@ -68,6 +79,7 @@ const appContext = {
   roomLifecycleService,
   battleRecordLifecycleService,
   roomService,
+  botDecisionService,
   battleRecordService,
   authService: null,
   accountAuthService: null,
@@ -110,6 +122,8 @@ appContext.gameService = new GameService({
   broadcaster,
   lobbyBroadcaster,
   battleRecordService,
+  botDecisionService,
+  botDecisionTimeoutMs: runtimeConfig.bot.decisionTimeoutMs,
   roundSelectionTimeoutMs: runtimeConfig.game.roundSelectionTimeoutMs,
 })
 

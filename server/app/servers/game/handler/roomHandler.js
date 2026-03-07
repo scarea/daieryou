@@ -14,7 +14,9 @@ class Handler {
    */
   async createRoom(msg, session, next) {
     try {
-      const room = await appContext.roomService.createRoom(session.get('user'))
+      const room = await appContext.roomService.createRoom(session.get('user'), {
+        selectionTimeoutMs: msg?.selectionTimeoutMs,
+      })
       next(null, { code: 200, data: { room } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : 400
@@ -31,6 +33,47 @@ class Handler {
       next(null, { code: 200, data: { room } })
     } catch (error) {
       const code = error.message === '用户未登录' ? 401 : error.message === '房间不存在' ? 404 : 400
+      next(null, { code, error: error.message })
+    }
+  }
+
+  /**
+   * 房主添加 AI 玩家
+   */
+  async addBots(msg, session, next) {
+    try {
+      const payload = await appContext.roomService.addBots(session.get('user'), msg.roomId, {
+        count: msg?.count,
+        difficulty: msg?.difficulty,
+      })
+      next(null, { code: 200, data: payload })
+    } catch (error) {
+      const code = error.message === '用户未登录'
+        ? 401
+        : error.message === '房间不存在'
+          ? 404
+          : 400
+      next(null, { code, error: error.message })
+    }
+  }
+
+  /**
+   * 房主移除 AI 玩家
+   */
+  async removeBot(msg, session, next) {
+    try {
+      const payload = await appContext.roomService.removeBot(
+        session.get('user'),
+        msg.roomId,
+        msg.botPlayerId,
+      )
+      next(null, { code: 200, data: payload })
+    } catch (error) {
+      const code = error.message === '用户未登录'
+        ? 401
+        : error.message === '房间不存在'
+          ? 404
+          : 400
       next(null, { code, error: error.message })
     }
   }

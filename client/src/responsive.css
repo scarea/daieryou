@@ -1,0 +1,166 @@
+/* 响应式优化 - 统一断点系统 */
+
+/*
+  标准断点：
+  - sm: 640px  (手机)
+  - md: 768px  (平板竖屏)
+  - lg: 1024px (平板横屏/小笔记本)
+  - xl: 1280px (桌面)
+*/
+
+/* 触摸目标最小尺寸优化 */
+@media (max-width: 768px) {
+  /* 确保所有按钮至少 44x44px */
+  .ant-btn {
+    min-height: 44px;
+    padding: 8px 16px;
+  }
+
+  .ant-btn-sm {
+    min-height: 36px;
+    padding: 4px 12px;
+  }
+
+  .ant-btn-lg {
+    min-height: 48px;
+    padding: 10px 20px;
+  }
+
+  /* 卡片点击区域 */
+  .playing-card {
+    min-width: 44px;
+    min-height: 60px;
+  }
+
+  /* 手牌区域优化 */
+  .hand-cards-container {
+    padding: var(--space-3);
+  }
+
+  /* 回合历史卡片 */
+  .history-result-card {
+    min-height: 44px;
+    padding: var(--space-2);
+  }
+}
+
+/* 横屏优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+  /* 减少垂直空间占用 */
+  .game-table {
+    height: 30vh;
+    min-height: 200px;
+  }
+
+  .hand-cards-container {
+    padding: var(--space-2);
+  }
+
+  .scene-hero-title {
+    font-size: 1.5rem !important;
+  }
+
+  /* 回合结果弹窗适配 */
+  .round-result-modal .ant-modal {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* 小屏幕优化 */
+@media (max-width: 640px) {
+  /* 字体缩放 */
+  .scene-hero-title {
+    font-size: 1.75rem !important;
+  }
+
+  .scene-hero-subtitle {
+    font-size: 0.875rem;
+  }
+
+  /* 卡片间距 */
+  .scene-card {
+    padding: var(--space-3) !important;
+  }
+
+  /* 回合结果网格 */
+  .round-result-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  /* 牌桌布局 */
+  .game-table-opponents {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 480px) {
+  .App {
+    padding: var(--space-2);
+  }
+
+  .scene-card {
+    padding: var(--space-2) !important;
+  }
+
+  /* 模态框宽度 */
+  .ant-modal {
+    max-width: calc(100vw - 32px);
+    margin: 16px auto;
+  }
+
+  /* 手牌卡片缩小 */
+  .playing-card.size-md {
+    width: 50px;
+    height: 70px;
+  }
+}
+
+/* 平板优化 */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .game-table {
+    max-width: 90%;
+  }
+
+  .round-result-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+/* 大屏幕优化 */
+@media (min-width: 1280px) {
+  .game-table {
+    max-width: 1000px;
+  }
+
+  .round-result-modal {
+    width: 1000px !important;
+  }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 高对比度模式 */
+@media (prefers-contrast: high) {
+  .scene-card {
+    border-width: 2px !important;
+  }
+
+  .playing-card {
+    border-width: 2px !important;
+  }
+
+  .ant-btn {
+    border-width: 2px !important;
+  }
+}

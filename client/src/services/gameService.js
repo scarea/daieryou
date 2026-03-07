@@ -85,8 +85,9 @@ export const gameService = {
   login(username, sessionToken) {
     return realtimeClient.request('connector.entryHandler.login', { username, sessionToken }).then(unwrapResponse)
   },
-  createRoom() {
+  createRoom({ selectionTimeoutMs } = {}) {
     return realtimeClient.request('game.roomHandler.createRoom', {
+      selectionTimeoutMs,
       operationId: buildOperationId('create-room'),
     }).then(unwrapResponse)
   },
@@ -94,6 +95,21 @@ export const gameService = {
     return realtimeClient.request('game.roomHandler.joinRoom', {
       roomId,
       operationId: buildOperationId('join-room', [roomId]),
+    }).then(unwrapResponse)
+  },
+  addBots({ roomId, count, difficulty }) {
+    return realtimeClient.request('game.roomHandler.addBots', {
+      roomId,
+      count,
+      difficulty,
+      operationId: buildOperationId('add-bots', [roomId, count || 1, difficulty || 'normal']),
+    }).then(unwrapResponse)
+  },
+  removeBot({ roomId, botPlayerId }) {
+    return realtimeClient.request('game.roomHandler.removeBot', {
+      roomId,
+      botPlayerId,
+      operationId: buildOperationId('remove-bot', [roomId, botPlayerId || '']),
     }).then(unwrapResponse)
   },
   leaveRoom(roomId) {

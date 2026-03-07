@@ -30,8 +30,22 @@
     "maxBatchesPerSweep": 3,
     "archiveBeforeCleanup": true
   },
+  "bot": {
+    "enabled": false,
+    "provider": "rule",
+    "maxPerRoom": 2,
+    "decisionTimeoutMs": 120,
+    "defaultDifficulty": "normal",
+    "llm": {
+      "enabled": false,
+      "endpoint": "https://api.openai.com/v1",
+      "apiKey": "",
+      "modelName": "gpt-4o-mini",
+      "systemPrompt": ""
+    }
+  },
   "game": {
-    "roundSelectionTimeoutMs": 30000
+    "roundSelectionTimeoutMs": 60000
   },
   "roomRepository": {
     "maxInMemoryRooms": 5000

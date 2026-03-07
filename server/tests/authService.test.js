@@ -103,3 +103,69 @@ test('login without session token should create different user ids', async () =>
 
   assert.notEqual(firstLogin.user.id, secondLogin.user.id)
 })
+
+test('login should include final round reveal when resuming a finished room', async () => {
+  const finalRoundResult = {
+    round: 5,
+    playerResults: [
+      { playerIndex: 0, playerName: 'Host', hand: [{ suit: 'spades', rank: 1 }], rank: 1 },
+      { playerIndex: 1, playerName: 'B', hand: [{ suit: 'hearts', rank: 7 }], rank: 2 },
+      { playerIndex: 2, playerName: 'C', hand: [{ suit: 'clubs', rank: 9 }], rank: 3 },
+    ],
+    loserIndex: 1,
+    score: 5,
+  }
+  const room = {
+    id: 'room-finished-1',
+    hostId: 'u1',
+    status: 'finished',
+    createdAt: Date.now(),
+    players: [
+      { id: 'u1', username: 'Host', score: 1000, online: true },
+      { id: 'u2', username: 'B', score: 1000, online: true },
+      { id: 'u3', username: 'C', score: 1000, online: true },
+    ],
+    gameState: null,
+    finalScores: [
+      { playerId: 'u1', username: 'Host', totalScore: 6, roundScores: [1, 1, 1, 1, 2] },
+      { playerId: 'u2', username: 'B', totalScore: -6, roundScores: [-2, -2, -2] },
+      { playerId: 'u3', username: 'C', totalScore: 0, roundScores: [1, 1, 1, 1, -4] },
+    ],
+    finalRoundResult,
+    finishedAt: Date.now(),
+  }
+
+  const service = new AuthService({
+    sessionRepository: {
+      bindUser() {},
+    },
+    roomService: {
+      setUserOnline() {
+        return room
+      },
+      setUserOffline() {},
+      cleanupUserFromRooms() {},
+    },
+    roomRepository: {
+      findByUserId(userId) {
+        return userId === 'u1' ? room : null
+      },
+    },
+    lobbyBroadcaster: {
+      buildRoomList() {
+        return []
+      },
+    },
+    disconnectGraceMs: 10,
+    maxUserProfiles: 2,
+    sessionTokenSecret: 'test-secret',
+    sessionTokenTtlMs: 60_000,
+  })
+
+  const payload = await service.login('Host', createSession('s-10'), service.issueSessionToken('u1'))
+
+  assert.equal(Array.isArray(payload.finalScores), true)
+  assert.equal(payload.finalScores.length, 3)
+  assert.deepEqual(payload.finalRoundResult, finalRoundResult)
+  assert.equal(payload.finalRoundResult.playerResults.length, 3)
+})

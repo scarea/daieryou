@@ -12,7 +12,13 @@ const rankMetaMap = {
   3: { icon: <FireOutlined />, color: '#a44646', label: '末位' },
 }
 
-const RoundResult = ({ roundResult, visible, onClose }) => {
+const RoundResult = ({
+  roundResult,
+  visible,
+  onClose,
+  currentPlayerId = '',
+  currentUsername = '',
+}) => {
   const [showScoreAnimation, setShowScoreAnimation] = useState(false)
 
   useEffect(() => {
@@ -21,9 +27,10 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
       return undefined
     }
 
+    // 缩短延迟从 600ms 到 300ms，提升响应速度
     const timer = window.setTimeout(() => {
       setShowScoreAnimation(true)
-    }, 600)
+    }, 300)
 
     return () => {
       window.clearTimeout(timer)
@@ -33,6 +40,25 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
   if (!roundResult) {
     return null
   }
+
+  const getScoreDelta = (result = {}) => {
+    const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
+    const isLoser = loserIndexes.includes(result.playerIndex)
+    const fallbackScoreDelta = isLoser ? -roundResult.score : roundResult.score
+    return Number.isFinite(result.scoreDelta) ? Number(result.scoreDelta) : fallbackScoreDelta
+  }
+
+  const isSelfResult = (result = {}) => (
+    (currentPlayerId && result.playerId === currentPlayerId)
+    || (!result.playerId && currentUsername && result.playerName === currentUsername)
+  )
+
+  const selfResult = roundResult.playerResults.find((result) => isSelfResult(result)) || null
+  const selfScoreDelta = selfResult ? getScoreDelta(selfResult) : null
+  const selfOutcomeLabel = selfScoreDelta == null
+    ? ''
+    : (selfScoreDelta >= 0 ? '本轮你赢了' : '本轮你输了')
+  const resultGridClassName = `round-result-grid ${selfResult ? 'has-self-focus' : ''}`.trim()
 
   return (
     <Modal
@@ -55,6 +81,18 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
       className="round-result-modal"
     >
       <div className="round-result-content">
+        {selfResult && (
+          <div className={`round-self-banner ${selfScoreDelta >= 0 ? 'win' : 'loss'}`}>
+            <Text strong>
+              {selfOutcomeLabel}
+              {' '}
+              <span className="round-self-score">
+                {selfScoreDelta >= 0 ? '+' : ''}{selfScoreDelta}
+              </span>
+            </Text>
+          </div>
+        )}
+
         {roundResult.publicCard && (
           <Card className="scene-card round-public-card" size="small">
             <Text type="secondary">本轮公牌</Text>
@@ -64,15 +102,18 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
           </Card>
         )}
 
-        <div className="round-result-grid">
-          {roundResult.playerResults.map((result, index) => {
+        <div className={resultGridClassName}>
+          {roundResult.playerResults.map((result) => {
             const rankMeta = rankMetaMap[result.rank] || rankMetaMap[3]
-            const isLoser = index === roundResult.loserIndex
-            const scoreClassName = isLoser ? 'loss' : 'gain'
+            const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
+            const isLoser = loserIndexes.includes(result.playerIndex)
+            const isSelf = isSelfResult(result)
+            const scoreDelta = getScoreDelta(result)
+            const scoreClassName = scoreDelta < 0 ? 'loss' : 'gain'
 
             return (
               <Card
-                className={`scene-card round-result-player-card rank-${result.rank} ${isLoser ? 'is-loser' : ''}`.trim()}
+                className={`scene-card round-result-player-card rank-${result.rank} ${isLoser ? 'is-loser' : ''} ${isSelf ? 'is-self' : 'is-other'}`.trim()}
                 key={`${result.playerIndex}-${result.rank}`}
                 size="small"
               >
@@ -88,6 +129,7 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
                     <Text strong className="round-result-player-name">
                       {result.playerName || `玩家${result.playerIndex + 1}`}
                     </Text>
+                    {isSelf && <Tag color="gold">你</Tag>}
                     {result.selectedByTimeout && <Tag color="orange">托管</Tag>}
                   </div>
 
@@ -105,7 +147,7 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
 
                   {showScoreAnimation && (
                     <div className={`score-change-pill ${scoreClassName}`}>
-                      {isLoser ? '-' : '+'}{roundResult.score}
+                      {scoreDelta >= 0 ? '+' : ''}{scoreDelta}
                     </div>
                   )}
                 </Space>
@@ -118,7 +160,21 @@ const RoundResult = ({ roundResult, visible, onClose }) => {
         <div className="round-summary">
           <Text type="secondary">本轮积分: {roundResult.score}</Text>
           <Text strong className="round-summary-loser">
-            {roundResult.playerResults[roundResult.loserIndex]?.playerName || `玩家${roundResult.loserIndex + 1}`} 输掉本轮
+            {(() => {
+              const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
+              if (loserIndexes.length === 0) return '本轮无输家'
+              if (loserIndexes.length === 1) {
+                const loserResult = roundResult.playerResults.find((r) => r.playerIndex === loserIndexes[0])
+                const loserName = loserResult?.playerName || `玩家${loserIndexes[0] + 1}`
+                return `${loserName} 输掉本轮`
+              }
+              // 多输家场景：更清晰的表述
+              const loserNames = loserIndexes.map((loserIdx) => {
+                const loserResult = roundResult.playerResults.find((r) => r.playerIndex === loserIdx)
+                return loserResult?.playerName || `玩家${loserIdx + 1}`
+              })
+              return `${loserNames.join('、')} 并列输掉本轮`
+            })()}
           </Text>
         </div>
       </div>

@@ -42,6 +42,12 @@
   font-size: 15px;
 }
 
+.card-size-xl {
+  --card-width: 90px;
+  --card-height: 126px;
+  font-size: 18px;
+}
+
 .card:hover {
   transform: translateY(-5px) rotate(-1.2deg);
   box-shadow: 0 16px 26px rgba(7, 35, 49, 0.18);
@@ -117,6 +123,12 @@
 }
 
 @media (max-width: 640px) {
+  .card-size-xl {
+    --card-width: 78px;
+    --card-height: 112px;
+    font-size: 16px;
+  }
+
   .card-size-lg {
     --card-width: 68px;
     --card-height: 96px;

@@ -6,6 +6,24 @@ import useGameStore from '../store/gameStore'
 
 const { Title, Text } = Typography
 const DEFAULT_BATTLE_STATS_LIMIT = 20
+const BOT_DIFFICULTY_OPTIONS = [
+  { value: 'easy', label: '简单' },
+  { value: 'normal', label: '标准' },
+  { value: 'hard', label: '进阶' },
+]
+const ROUND_TIMEOUT_OPTIONS = [
+  { value: 30, label: '30 秒' },
+  { value: 45, label: '45 秒' },
+  { value: 60, label: '60 秒' },
+  { value: 90, label: '90 秒' },
+  { value: 120, label: '120 秒' },
+]
+
+function getBotDifficultyLabel(difficulty) {
+  const normalized = typeof difficulty === 'string' ? difficulty.trim().toLowerCase() : ''
+  const target = BOT_DIFFICULTY_OPTIONS.find((item) => item.value === normalized)
+  return target ? target.label : '标准'
+}
 
 function normalizeDateInputValue(timestamp) {
   const value = Number(timestamp)
@@ -57,6 +75,8 @@ const RoomScene = () => {
     battleStatsRecords,
     battleStatsPagination,
     battleStatsFilters,
+    addBots,
+    removeBot,
     joinRoom,
     leaveRoom,
     getRoomList,
@@ -77,6 +97,11 @@ const RoomScene = () => {
   const [adminInviteLoading, setAdminInviteLoading] = useState(false)
   const [adminAuditLoading, setAdminAuditLoading] = useState(false)
   const [battleStatsLoading, setBattleStatsLoading] = useState(false)
+  const [addBotLoading, setAddBotLoading] = useState(false)
+  const [removingBotId, setRemovingBotId] = useState('')
+  const [botDifficulty, setBotDifficulty] = useState('normal')
+  const [roundSelectionTimeoutSec, setRoundSelectionTimeoutSec] = useState(60)
+  const [soloLoading, setSoloLoading] = useState(false)
   const [battleRoomIdFilter, setBattleRoomIdFilter] = useState('')
   const [battleRankFilter, setBattleRankFilter] = useState('all')
   const [battleStartDateFilter, setBattleStartDateFilter] = useState('')
@@ -142,7 +167,9 @@ const RoomScene = () => {
   const handleCreateRoom = async () => {
     setLoading(true)
     try {
-      await createRoom()
+      await createRoom({
+        selectionTimeoutMs: Number(roundSelectionTimeoutSec) * 1000,
+      })
       message.success('房间创建成功')
     } catch (error) {
       message.error(error.message)
@@ -194,6 +221,56 @@ const RoomScene = () => {
     }
   }
 
+  const handleAddBot = async () => {
+    if (!currentRoom) {
+      return
+    }
+
+    setAddBotLoading(true)
+    try {
+      const payload = await addBots({
+        roomId: currentRoom.id,
+        count: 1,
+        difficulty: botDifficulty,
+      })
+      const addedBot = Array.isArray(payload?.addedBots) ? payload.addedBots[0] : null
+      if (addedBot?.username) {
+        message.success(`已添加 ${addedBot.username}`)
+        return
+      }
+      message.success('AI 补位成功')
+    } catch (error) {
+      message.error(error.message || '添加 AI 失败')
+    } finally {
+      setAddBotLoading(false)
+    }
+  }
+
+  const handleRemoveBot = (botPlayer) => {
+    if (!currentRoom || !botPlayer?.id) {
+      return
+    }
+
+    Modal.confirm({
+      title: `移除 ${botPlayer.username || '该 AI'}？`,
+      content: '移除后将释放该席位',
+      onOk: async () => {
+        setRemovingBotId(botPlayer.id)
+        try {
+          await removeBot({
+            roomId: currentRoom.id,
+            botPlayerId: botPlayer.id,
+          })
+          message.success('AI 已移除')
+        } catch (error) {
+          message.error(error.message || '移除 AI 失败')
+        } finally {
+          setRemovingBotId('')
+        }
+      },
+    })
+  }
+
   const handleRefreshRooms = async () => {
     if (refreshing) {
       return
@@ -206,6 +283,40 @@ const RoomScene = () => {
       console.error('刷新房间列表失败:', error)
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleCreateSoloGame = async ({ autoStart = true } = {}) => {
+    if (soloLoading) {
+      return
+    }
+
+    setSoloLoading(true)
+    try {
+      const room = await createRoom({
+        selectionTimeoutMs: Number(roundSelectionTimeoutSec) * 1000,
+      })
+      const roomId = room?.id
+      if (!roomId) {
+        throw new Error('创建房间失败')
+      }
+
+      await addBots({
+        roomId,
+        count: 2,
+        difficulty: botDifficulty,
+      })
+
+      if (autoStart) {
+        await startGame(roomId)
+        message.success('单机对战已开始')
+      } else {
+        message.success('单机调试房已创建，可手动开始')
+      }
+    } catch (error) {
+      message.error(error.message || '创建单机房失败')
+    } finally {
+      setSoloLoading(false)
     }
   }
 
@@ -434,6 +545,9 @@ const RoomScene = () => {
     const isHost = currentRoom.hostId === user?.id
     const isWaiting = currentRoom.status === 'waiting'
     const hasOfflinePlayer = currentRoom.players.some((player) => player.online === false)
+    const botPlayers = currentRoom.players.filter((player) => player.isBot === true)
+    const canManageBots = isHost && isWaiting
+    const isRoomFull = currentRoom.players.length >= 3
 
     return (
       <Card className="scene-card room-scene-card" style={{ width: 'min(100%, 760px)' }}>
@@ -441,6 +555,8 @@ const RoomScene = () => {
           <Title level={3} className="scene-hero-title">房间: {currentRoom.id.slice(0, 8)}</Title>
           <Text className="scene-hero-subtitle">
             {isWaiting ? '等待其他玩家加入...' : '本局已结束或中止，可等待房主重新开始'}
+            {' · '}
+            选牌时限 {Math.max(10, Math.floor((currentRoom.selectionTimeoutMs || 60000) / 1000))} 秒
           </Text>
         </header>
 
@@ -455,7 +571,10 @@ const RoomScene = () => {
         />
 
         <section className="scene-section">
-          <Title level={4} className="scene-section-title">玩家列表 ({currentRoom.players.length}/3)</Title>
+          <Title level={4} className="scene-section-title">
+            玩家列表 ({currentRoom.players.length}/3)
+            {botPlayers.length > 0 && ` · AI ${botPlayers.length}`}
+          </Title>
           <List
             className="room-player-list"
             dataSource={currentRoom.players}
@@ -467,14 +586,49 @@ const RoomScene = () => {
                     {player.username}
                     {player.id === user?.id && ' (你)'}
                   </Text>
+                  {player.isBot === true && <Tag color="cyan">AI</Tag>}
+                  {player.isBot === true && <Tag color="geekblue">{getBotDifficultyLabel(player.botDifficulty)}</Tag>}
                   {player.id === currentRoom.hostId && <Tag className="room-status-chip" color="gold">房主</Tag>}
                   {player.online === false && <Tag color="red">离线</Tag>}
                   <Text className="scene-hero-subtitle">积分: {player.score}</Text>
+                  {canManageBots && player.isBot === true && (
+                    <Button
+                      size="small"
+                      danger
+                      loading={removingBotId === player.id}
+                      data-testid={`remove-bot-${player.id}`}
+                      onClick={() => handleRemoveBot(player)}
+                    >
+                      移除 AI
+                    </Button>
+                  )}
                 </Space>
               </List.Item>
             )}
           />
         </section>
+
+        {canManageBots && (
+          <div className="room-action-row" style={{ marginTop: 0 }}>
+            <Space wrap>
+              <Select
+                value={botDifficulty}
+                style={{ width: 140 }}
+                options={BOT_DIFFICULTY_OPTIONS}
+                onChange={setBotDifficulty}
+              />
+              <Button
+                className="scene-subtle-btn scene-action-btn"
+                data-testid="add-bot-button"
+                loading={addBotLoading}
+                disabled={isRoomFull}
+                onClick={handleAddBot}
+              >
+                {isRoomFull ? '房间已满' : '添加 AI'}
+              </Button>
+            </Space>
+          </div>
+        )}
 
         <div className="room-action-row">
           <Button
@@ -527,6 +681,12 @@ const RoomScene = () => {
       />
 
       <div className="lobby-actions">
+        <Select
+          value={roundSelectionTimeoutSec}
+          style={{ width: 140 }}
+          options={ROUND_TIMEOUT_OPTIONS}
+          onChange={setRoundSelectionTimeoutSec}
+        />
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -542,6 +702,35 @@ const RoomScene = () => {
           刷新列表
         </Button>
       </div>
+
+      <section className="scene-section">
+        <Title level={4} className="scene-section-title">单机与调试</Title>
+        <Space wrap size={10}>
+          <Select
+            value={botDifficulty}
+            style={{ width: 140 }}
+            options={BOT_DIFFICULTY_OPTIONS}
+            onChange={setBotDifficulty}
+          />
+          <Button
+            type="primary"
+            className="scene-primary-btn scene-action-btn"
+            data-testid="create-solo-game-button"
+            loading={soloLoading}
+            onClick={() => handleCreateSoloGame({ autoStart: true })}
+          >
+            单机开局（1人+2AI）
+          </Button>
+          <Button
+            className="scene-subtle-btn scene-action-btn"
+            data-testid="create-solo-debug-room-button"
+            loading={soloLoading}
+            onClick={() => handleCreateSoloGame({ autoStart: false })}
+          >
+            创建调试房（1人+2AI）
+          </Button>
+        </Space>
+      </section>
 
       {authConfig?.emailEnabled !== false && accountInfo && (
         <section className="scene-section">
@@ -823,7 +1012,7 @@ const RoomScene = () => {
                 <List.Item.Meta
                   avatar={<UserOutlined />}
                   title={`房间 ${room.id.slice(0, 8)}`}
-                  description={`在线: ${room.onlineCount}/${room.playerCount} | 创建时间: ${new Date(room.createdAt).toLocaleTimeString()}`}
+                  description={`在线: ${room.onlineCount}/${room.playerCount} | AI: ${room.botCount || 0} | 选牌时限: ${Math.max(10, Math.floor((room.selectionTimeoutMs || 60000) / 1000))} 秒 | 创建时间: ${new Date(room.createdAt).toLocaleTimeString()}`}
                 />
               </List.Item>
             )}
