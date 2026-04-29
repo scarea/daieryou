@@ -114,6 +114,23 @@ class GameService {
     return player?.isBot === true
   }
 
+  setGameAction(gameState, type, payload = {}) {
+    if (!gameState) {
+      return
+    }
+
+    const nextSeq = Number(gameState.actionSeq || 0) + 1
+    gameState.actionSeq = nextSeq
+    gameState.phase = payload.phase || gameState.phase || 'selecting'
+    gameState.lastAction = {
+      ...payload,
+      type,
+      round: Number(payload.round || gameState.currentRound || 1),
+      seq: nextSeq,
+      at: Date.now(),
+    }
+  }
+
   logBotDecision({
     roomId,
     round,
@@ -321,7 +338,14 @@ class GameService {
     const publicRoom = serializeRoom(room)
 
     if (room.gameState.currentRound < room.gameState.maxRounds) {
-      prepareNextRound(room.gameState, roundResult.loserIndex)
+      const resolvedRound = room.gameState.currentRound
+      prepareNextRound(room.gameState, roundResult.loserIndexes || roundResult.loserIndex)
+      this.setGameAction(room.gameState, 'roundAdvanced', {
+        phase: 'selecting',
+        round: resolvedRound,
+        nextRound: room.gameState.currentRound,
+        loserIndexes: roundResult.loserIndexes || [],
+      })
       await this.applyBotDecisions(room, 'round-advanced')
       this.scheduleRoundTimer(room)
       await this.roomRepository.saveWithMode(room)
@@ -341,6 +365,12 @@ class GameService {
 
       return null
     }
+
+    this.setGameAction(room.gameState, 'gameEnded', {
+      phase: 'finished',
+      round: room.gameState.currentRound,
+      loserIndexes: roundResult.loserIndexes || [],
+    })
 
     const finalGameStateSnapshots = new Map(
       room.players.map((playerItem) => [
@@ -411,6 +441,13 @@ class GameService {
       return
     }
 
+    const pendingCount = room.gameState.players.filter((item) => !item.hasSelected).length
+    this.setGameAction(room.gameState, 'timeoutAutoSelected', {
+      phase: pendingCount === 0 ? 'revealing' : 'selecting',
+      autoSelectedCount,
+      pendingCount,
+    })
+
     await this.roomRepository.saveWithMode(room)
     if (!room.gameState.players.every((item) => item.hasSelected)) {
       this.broadcastGameStateUpdate(room, 'timeout-partial')
@@ -446,6 +483,7 @@ class GameService {
         ? room.selectionTimeoutMs
         : this.roundSelectionTimeoutMs,
     })
+    this.setGameAction(room.gameState, 'deal', { phase: 'selecting', playerCount: room.players.length })
     room.finalScores = null
     room.finalRoundResult = null
     room.finishedAt = null
@@ -489,6 +527,7 @@ class GameService {
         ? room.selectionTimeoutMs
         : this.roundSelectionTimeoutMs,
     })
+    this.setGameAction(room.gameState, 'deal', { phase: 'selecting', playerCount: room.players.length })
     room.finalScores = null
     room.finalRoundResult = null
     room.finishedAt = null
@@ -578,6 +617,13 @@ class GameService {
     player.hasSelected = true
     player.selectedByTimeout = false
     await this.applyBotDecisions(room, 'player-selection')
+    const pendingCount = room.gameState.players.filter((item) => !item.hasSelected).length
+    this.setGameAction(room.gameState, 'playerSelected', {
+      phase: pendingCount === 0 ? 'revealing' : 'selecting',
+      playerId: player.id,
+      pendingCount,
+      selectedCount: deduplicated.length,
+    })
     await this.roomRepository.saveWithMode(room)
 
     const responseGameState = await this.resolveRoundIfReady(room, user.id)

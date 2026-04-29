@@ -8,7 +8,7 @@ const { Title, Text } = Typography
 
 const rankMetaMap = {
   1: { icon: <TrophyOutlined />, color: '#1e9f63', label: '头名' },
-  2: { icon: <MehOutlined />, color: '#d17a29', label: '次名' },
+  2: { icon: <MehOutlined />, color: '#d17a29', label: '次名·二游' },
   3: { icon: <FireOutlined />, color: '#a44646', label: '末位' },
 }
 
@@ -41,8 +41,8 @@ const RoundResult = ({
     return null
   }
 
+  const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
   const getScoreDelta = (result = {}) => {
-    const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
     const isLoser = loserIndexes.includes(result.playerIndex)
     const fallbackScoreDelta = isLoser ? -roundResult.score : roundResult.score
     return Number.isFinite(result.scoreDelta) ? Number(result.scoreDelta) : fallbackScoreDelta
@@ -57,15 +57,30 @@ const RoundResult = ({
   const selfScoreDelta = selfResult ? getScoreDelta(selfResult) : null
   const selfOutcomeLabel = selfScoreDelta == null
     ? ''
-    : (selfScoreDelta >= 0 ? '本轮你赢了' : '本轮你输了')
+    : (selfScoreDelta >= 0 ? '本轮你安全上岸' : '本轮你成为二游')
+  const sortedPlayerResults = [...roundResult.playerResults].sort((left, right) => {
+    if (left.rank !== right.rank) return left.rank - right.rank
+    return left.playerIndex - right.playerIndex
+  })
+  const loserNames = loserIndexes.map((loserIdx) => {
+    const loserResult = roundResult.playerResults.find((result) => result.playerIndex === loserIdx)
+    return loserResult?.playerName || `玩家${loserIdx + 1}`
+  })
+  const loserSummaryText = loserNames.length === 0
+    ? '本轮无二游输家'
+    : loserNames.length === 1
+      ? `${loserNames[0]} 成为本轮二游`
+      : `${loserNames.join('、')} 并列二游`
   const resultGridClassName = `round-result-grid ${selfResult ? 'has-self-focus' : ''}`.trim()
+  const contentClassName = `round-result-content ${selfScoreDelta == null ? '' : selfScoreDelta >= 0 ? 'is-self-win' : 'is-self-loss'}`.trim()
 
   return (
     <Modal
       title={(
         <div className="round-modal-title">
+          <span className="round-title-kicker">ROUND SETTLEMENT</span>
           <Title level={3} className="scene-hero-title">
-            第 {roundResult.round} 轮结果
+            第 {roundResult.round} 轮结算
           </Title>
         </div>
       )}
@@ -73,37 +88,51 @@ const RoundResult = ({
       onCancel={onClose}
       footer={(
         <Button type="primary" className="scene-primary-btn scene-action-btn" onClick={onClose} size="large" data-testid="round-result-continue">
-          继续游戏
+          进入下一轮
         </Button>
       )}
-      width={920}
+      width={1040}
       centered
       className="round-result-modal"
     >
-      <div className="round-result-content">
-        {selfResult && (
-          <div className={`round-self-banner ${selfScoreDelta >= 0 ? 'win' : 'loss'}`}>
-            <Text strong>
-              {selfOutcomeLabel}
-              {' '}
+      <div className={contentClassName}>
+        <div className="round-result-flow-strip" aria-label="本轮结算流程">
+          <span className="is-done">翻牌</span>
+          <span className="is-done">牌型</span>
+          <span className={showScoreAnimation ? 'is-done is-active' : 'is-active'}>积分</span>
+        </div>
+
+        <section className="round-settlement-hero">
+          <div className={`round-self-banner ${selfScoreDelta == null || selfScoreDelta >= 0 ? 'win' : 'loss'}`}>
+            <span className="round-hero-label">你的结果</span>
+            <Text strong>{selfOutcomeLabel || '观战结算'}</Text>
+            {selfScoreDelta != null && (
               <span className="round-self-score">
                 {selfScoreDelta >= 0 ? '+' : ''}{selfScoreDelta}
               </span>
-            </Text>
+            )}
           </div>
-        )}
 
-        {roundResult.publicCard && (
-          <Card className="scene-card round-public-card" size="small">
-            <Text type="secondary">本轮公牌</Text>
+          <div className="round-public-stage">
+            <span className="round-hero-label">本轮公牌</span>
             <div className="round-public-card-inner">
-              <CardComponent card={roundResult.publicCard} size="lg" reveal />
+              {roundResult.publicCard ? (
+                <CardComponent card={roundResult.publicCard} size="lg" reveal />
+              ) : (
+                <span className="round-no-public-card">终局底牌</span>
+              )}
             </div>
-          </Card>
-        )}
+          </div>
+
+          <div className="round-loser-callout">
+            <span className="round-hero-label">逮二游</span>
+            <strong>{loserSummaryText}</strong>
+            <em>本轮基础分 {roundResult.score}</em>
+          </div>
+        </section>
 
         <div className={resultGridClassName}>
-          {roundResult.playerResults.map((result) => {
+          {sortedPlayerResults.map((result, resultIndex) => {
             const rankMeta = rankMetaMap[result.rank] || rankMetaMap[3]
             const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
             const isLoser = loserIndexes.includes(result.playerIndex)
@@ -116,7 +145,9 @@ const RoundResult = ({
                 className={`scene-card round-result-player-card rank-${result.rank} ${isLoser ? 'is-loser' : ''} ${isSelf ? 'is-self' : 'is-other'}`.trim()}
                 key={`${result.playerIndex}-${result.rank}`}
                 size="small"
+                style={{ '--reveal-order': resultIndex, '--rank-color': rankMeta.color }}
               >
+                <div className="round-result-card-glow" />
                 <div className="round-result-rank-badge" style={{ background: rankMeta.color }}>
                   {rankMeta.label}
                 </div>
@@ -135,7 +166,13 @@ const RoundResult = ({
 
                   <div className="round-result-hand-cards">
                     {result.hand.map((card, cardIndex) => (
-                      <CardComponent key={cardIndex} card={card} size="sm" reveal />
+                      <span
+                        className="round-reveal-card-shell"
+                        key={cardIndex}
+                        style={{ '--card-order': cardIndex }}
+                      >
+                        <CardComponent card={card} size="sm" reveal />
+                      </span>
                     ))}
                   </div>
 
@@ -157,25 +194,12 @@ const RoundResult = ({
         </div>
 
         <Divider />
+        <div className="round-result-next-hint">
+          {showScoreAnimation ? '确认后进入下一轮，牌桌会自动发牌' : '正在计算积分变化...'}
+        </div>
         <div className="round-summary">
           <Text type="secondary">本轮积分: {roundResult.score}</Text>
-          <Text strong className="round-summary-loser">
-            {(() => {
-              const loserIndexes = roundResult.loserIndexes || (roundResult.loserIndex >= 0 ? [roundResult.loserIndex] : [])
-              if (loserIndexes.length === 0) return '本轮无输家'
-              if (loserIndexes.length === 1) {
-                const loserResult = roundResult.playerResults.find((r) => r.playerIndex === loserIndexes[0])
-                const loserName = loserResult?.playerName || `玩家${loserIndexes[0] + 1}`
-                return `${loserName} 输掉本轮`
-              }
-              // 多输家场景：更清晰的表述
-              const loserNames = loserIndexes.map((loserIdx) => {
-                const loserResult = roundResult.playerResults.find((r) => r.playerIndex === loserIdx)
-                return loserResult?.playerName || `玩家${loserIdx + 1}`
-              })
-              return `${loserNames.join('、')} 并列输掉本轮`
-            })()}
-          </Text>
+          <Text strong className="round-summary-loser">{loserSummaryText}</Text>
         </div>
       </div>
     </Modal>

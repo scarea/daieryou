@@ -103,6 +103,10 @@ test('startGame should use room-level selection timeout when configured', async 
   const gameState = await service.startGame(players[0], 'room-timeout-config')
   assert.equal(gameState.selectionTimeoutMs, 60000)
   assert.ok(Number.isFinite(gameState.roundDeadlineAt))
+  assert.equal(gameState.phase, 'selecting')
+  assert.equal(gameState.lastAction.type, 'deal')
+  assert.equal(gameState.lastAction.playerCount, 3)
+  assert.equal(gameState.actionSeq, 1)
 })
 
 test('restartGame should reject unfinished room', async () => {
@@ -253,6 +257,9 @@ test('selectCards should broadcast gameStateUpdated while waiting other players'
 
   assert.equal(gameStateUpdatedEvents.length, 3)
   assert.ok(gameStateUpdatedEvents.every((entry) => entry.payload.reason === 'selection-progress'))
+  assert.ok(gameStateUpdatedEvents.every((entry) => entry.payload.gameState.lastAction.type === 'playerSelected'))
+  assert.ok(gameStateUpdatedEvents.every((entry) => entry.payload.gameState.lastAction.playerId === players[0].id))
+  assert.ok(gameStateUpdatedEvents.every((entry) => entry.payload.gameState.phase === 'selecting'))
 })
 
 test('round timeout should auto select pending players and resolve round', async () => {

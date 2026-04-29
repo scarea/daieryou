@@ -204,7 +204,7 @@ const LoginScene = ({ onLoginSuccess }) => {
 
   return (
     <>
-      <Card className="scene-card" style={{ width: 'min(100%, 520px)' }}>
+      <Card className="scene-card login-scene-card" style={{ width: 'min(100%, 520px)' }}>
         <header className="login-scene-header">
           <Title level={2} className="scene-hero-title login-scene-title">
             逮二游

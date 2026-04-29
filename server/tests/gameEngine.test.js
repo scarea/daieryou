@@ -37,6 +37,9 @@ test('createInitialGameState should deal cards based on config', () => {
 
   const gameState = createInitialGameState(players)
   assert.equal(gameState.players.length, 3)
+  assert.equal(gameState.phase, 'selecting')
+  assert.equal(gameState.actionSeq, 0)
+  assert.equal(gameState.lastAction.type, 'deal')
   gameState.players.forEach((player) => {
     assert.equal(player.handCards.length, 5)
     assert.deepEqual(player.playedCards, [])
@@ -380,4 +383,3 @@ test('calculateRound should handle two second-place ties (multiple losers)', () 
   assert.equal(gameState.players[roundResult.playerResults[1].playerIndex].roundScores[0], -roundResult.score)
   assert.equal(gameState.players[roundResult.playerResults[2].playerIndex].roundScores[0], -roundResult.score)
 })
-

@@ -10,28 +10,28 @@
   --font-display: 'Space Grotesk', 'Noto Sans SC', 'PingFang SC', sans-serif;
   --font-body: 'Noto Sans SC', 'Space Grotesk', 'PingFang SC', sans-serif;
 
-  --bg-deep: #092331;
-  --bg-mid: #0f3a4f;
-  --bg-soft: #f2f8fb;
-  --bg-elevated: rgba(255, 255, 255, 0.9);
+  --bg-deep: #03131d;
+  --bg-mid: #06293a;
+  --bg-soft: #0d3f4f;
+  --bg-elevated: rgba(8, 28, 39, 0.9);
 
-  --surface-card: rgba(252, 255, 255, 0.9);
-  --surface-card-strong: rgba(255, 255, 255, 0.96);
-  --surface-border: rgba(255, 255, 255, 0.65);
-  --surface-border-strong: rgba(8, 53, 72, 0.24);
+  --surface-card: rgba(6, 26, 38, 0.78);
+  --surface-card-strong: rgba(8, 33, 45, 0.94);
+  --surface-border: rgba(148, 163, 184, 0.2);
+  --surface-border-strong: rgba(250, 204, 21, 0.28);
 
-  --text-main: #0f3243;
-  --text-subtle: #4c6978;
-  --text-on-dark: #eefbfd;
+  --text-main: #ecfeff;
+  --text-subtle: #9bd6cf;
+  --text-on-dark: #f8fafc;
 
-  --accent: #d17434;
-  --accent-strong: #b75f28;
-  --accent-alt: #0f8a7a;
-  --accent-alt-strong: #0c6f63;
-  --danger: #c8452d;
-  --success: #1e9f63;
-  --warning: #d17a29;
-  --info: #1c83b1;
+  --accent: #f59e0b;
+  --accent-strong: #d97706;
+  --accent-alt: #14b8a6;
+  --accent-alt-strong: #0f766e;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --info: #38bdf8;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -47,9 +47,9 @@
   --radius-lg: 16px;
   --radius-xl: 22px;
 
-  --shadow-sm: 0 8px 16px rgba(7, 35, 49, 0.12);
-  --shadow-md: 0 16px 32px rgba(7, 35, 49, 0.18);
-  --shadow-lg: 0 28px 60px rgba(6, 32, 46, 0.24);
+  --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 18px 44px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.45);
 
   --z-base: 1;
   --z-decor: 2;

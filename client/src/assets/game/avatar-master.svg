@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="master avatar">
+  <defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#d9f99d"/><stop offset="1" stop-color="#0f172a"/></linearGradient><linearGradient id="robe" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#64748b"/><stop offset="1" stop-color="#111827"/></linearGradient></defs>
+  <circle cx="90" cy="90" r="86" fill="url(#bg)"/>
+  <path d="M36 164c8-41 29-60 54-60s46 19 54 60" fill="url(#robe)"/>
+  <circle cx="90" cy="82" r="43" fill="#e9c7a4"/>
+  <path d="M52 72c5-32 23-48 52-45 23 3 36 21 35 50-24-13-54-17-87-5Z" fill="#f8fafc"/>
+  <path d="M63 72c16-12 41-16 64-5-3-29-18-43-42-41-22 2-34 17-22 46Z" fill="#334155"/>
+  <path d="M62 98c10-5 18-5 27 0M94 98c10-5 19-5 27 0" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="76" cy="90" r="4" fill="#111827"/><circle cx="108" cy="90" r="4" fill="#111827"/>
+  <path d="M78 113c8 5 16 5 24 0" fill="none" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <path d="M75 119c7 18 23 18 30 0" fill="#f8fafc" opacity="0.92"/>
+  <rect x="121" y="124" width="25" height="36" rx="5" fill="#f8fafc" transform="rotate(13 134 142)"/>
+  <text x="134" y="148" text-anchor="middle" font-size="18" font-family="serif" fill="#111827">K</text>
+</svg>

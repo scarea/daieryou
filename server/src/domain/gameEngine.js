@@ -375,6 +375,14 @@ function createInitialGameState(players, options = {}) {
     selectionTimeoutMs,
     roundDeadlineAt: null,
     roundResults: [],
+    phase: 'selecting',
+    actionSeq: 0,
+    lastAction: {
+      type: 'deal',
+      round: 1,
+      seq: 0,
+      at: Date.now(),
+    },
   }
 
   for (let cardIndex = 0; cardIndex < gameConfig.handCardsCount; cardIndex += 1) {
@@ -504,7 +512,7 @@ function calculateRound(gameState) {
 
   const roundResult = {
     round: currentRound,
-    publicCard: isSelectionRound && !isHiddenCard ? publicCard : null,
+    publicCard: isSelectionRound ? publicCard : null,
     playerResults: evaluations.map((entry) => ({
       playerIndex: entry.playerIndex,
       playerId: gameState.players[entry.playerIndex].id,

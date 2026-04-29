@@ -11,11 +11,17 @@ const GameScene = lazy(() => import('./scenes/GameScene'))
 
 const antdTheme = {
   token: {
-    colorPrimary: '#0f8a7a',
-    colorError: '#c8452d',
-    colorWarning: '#d17a29',
-    colorInfo: '#1c83b1',
-    borderRadius: 12,
+    colorPrimary: '#14b8a6',
+    colorError: '#ef4444',
+    colorWarning: '#f59e0b',
+    colorInfo: '#38bdf8',
+    colorSuccess: '#22c55e',
+    colorText: '#ecfeff',
+    colorTextSecondary: '#a7f3d0',
+    colorBgContainer: 'rgba(8, 28, 39, 0.84)',
+    colorBgElevated: 'rgba(7, 23, 35, 0.96)',
+    colorBorder: 'rgba(148, 163, 184, 0.22)',
+    borderRadius: 14,
     fontFamily: "'Space Grotesk', 'Noto Sans SC', 'PingFang SC', sans-serif",
   },
   components: {

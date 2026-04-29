@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="cheerful avatar">
+  <defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#f9a8d4"/><stop offset="1" stop-color="#38bdf8"/></linearGradient><linearGradient id="dress" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#fb7185"/><stop offset="1" stop-color="#be123c"/></linearGradient></defs>
+  <circle cx="90" cy="90" r="86" fill="url(#bg)"/>
+  <path d="M36 164c9-39 30-58 54-58s45 19 54 58" fill="url(#dress)"/>
+  <circle cx="90" cy="84" r="44" fill="#ffd0ad"/>
+  <path d="M48 80c3-31 18-54 46-55 33-1 47 25 44 57-12-15-23-25-46-23-21 2-33 11-44 21Z" fill="#7c2d12"/>
+  <path d="M49 85c-10 9-11 25-2 32 7 5 16 0 18-11" fill="#7c2d12"/>
+  <path d="M131 85c10 9 11 25 2 32-7 5-16 0-18-11" fill="#7c2d12"/>
+  <circle cx="74" cy="89" r="5" fill="#1f2937"/><circle cx="106" cy="89" r="5" fill="#1f2937"/>
+  <path d="M76 111c9 11 21 11 30 0" fill="none" stroke="#be123c" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="59" cy="60" r="12" fill="#fef08a"/><path d="M55 57l8 8M63 57l-8 8" stroke="#f97316" stroke-width="3"/>
+</svg>

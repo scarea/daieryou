@@ -550,7 +550,7 @@ const RoomScene = () => {
     const isRoomFull = currentRoom.players.length >= 3
 
     return (
-      <Card className="scene-card room-scene-card" style={{ width: 'min(100%, 760px)' }}>
+      <Card className="scene-card room-scene-card room-current-card" style={{ width: 'min(100%, 760px)' }}>
         <header className="room-header">
           <Title level={3} className="scene-hero-title">房间: {currentRoom.id.slice(0, 8)}</Title>
           <Text className="scene-hero-subtitle">
@@ -664,7 +664,7 @@ const RoomScene = () => {
   }
 
   return (
-    <Card className="scene-card room-scene-card" style={{ width: 'min(100%, 860px)' }}>
+    <Card className="scene-card room-scene-card lobby-scene-card" style={{ width: 'min(100%, 960px)' }}>
       <header className="room-header">
         <Title level={3} className="scene-hero-title">游戏大厅</Title>
         <Text className="scene-hero-subtitle">欢迎 {user?.username}，选择或创建房间开始游戏</Text>

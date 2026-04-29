@@ -50,8 +50,8 @@ services:
 
   client:
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: client/Dockerfile
       args:
         VITE_WS_URL: ws://localhost:3014
     container_name: daieryou-client

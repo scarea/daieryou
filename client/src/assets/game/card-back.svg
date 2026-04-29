@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 168" role="img" aria-label="card back">
+  <defs><linearGradient id="back" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#0f766e"/><stop offset="0.48" stop-color="#0e7490"/><stop offset="1" stop-color="#134e4a"/></linearGradient><linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fde68a"/><stop offset="1" stop-color="#b45309"/></linearGradient></defs>
+  <rect x="5" y="5" width="110" height="158" rx="16" fill="url(#back)" stroke="url(#gold)" stroke-width="6"/>
+  <rect x="19" y="19" width="82" height="130" rx="12" fill="none" stroke="#ccfbf1" stroke-opacity="0.42" stroke-width="3"/>
+  <path d="M60 42c21 19 32 36 32 50 0 18-14 30-32 30s-32-12-32-30c0-14 11-31 32-50Z" fill="#fef3c7" opacity="0.2"/>
+  <circle cx="60" cy="84" r="24" fill="none" stroke="#fde68a" stroke-opacity="0.65" stroke-width="4"/>
+  <path d="M43 84h34M60 67v34" stroke="#fde68a" stroke-opacity="0.65" stroke-width="4" stroke-linecap="round"/>
+</svg>
