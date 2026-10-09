@@ -31,11 +31,24 @@ cd server
 npx wrangler login                     # 浏览器中授权
 npx wrangler deploy                    # 部署，得到 https://daieryou.<子域名>.workers.dev
 openssl rand -hex 32 | npx wrangler secret put DAIERYOU_SESSION_TOKEN_SECRET
-npx wrangler secret put DAIERYOU_DATABASE_URL   # 粘贴 Supabase 连接串
 ```
-访问 `https://daieryou.<子域名>.workers.dev/healthz`，看到 `"database":"postgres"` 即成功。
 
-本地调试：在 `server/.dev.vars` 写入密钥后运行 `npx wrangler dev`（`.dev.vars` 已被 git 忽略）。
+**数据库通过 Hyperdrive 连接**：Supabase 连接池的证书由 Supabase 私有 CA 签发，Workers 直连会校验失败
+（`Connection terminated unexpectedly`）。Hyperdrive 支持上传自定义 CA，以 `verify-ca` 方式连接（加密且校验身份）：
+```bash
+# 上传 Supabase 根证书（公开证书，已放在仓库 supabase/supabase-root-2021-ca.pem），记下返回的 ID
+npx wrangler cert upload certificate-authority --ca-cert ../supabase/supabase-root-2021-ca.pem --name supabase-root-2021-ca
+# 隐藏输入数据库密码，校验连接后创建 Hyperdrive 配置，输出 Hyperdrive ID
+node scripts/set-supabase-secret.mjs <项目ref> <pooler主机> <CA证书ID>
+```
+把输出的 Hyperdrive ID 写进 `wrangler.toml` 的 `[[hyperdrive]]`，再执行 `npx wrangler deploy`。
+
+访问 `https://daieryou.<子域名>.workers.dev/healthz`，看到 `"database":"postgres","databaseVia":"hyperdrive"` 即成功。
+
+> 注意：重新部署或修改密钥后，正在运行的 Durable Object 实例会一直保持旧配置，直到所有连接断开、空闲约 1–2 分钟后才被替换。
+> 检查 `/healthz` 时不要高频轮询（每次请求都会让旧实例继续存活），间隔几分钟再看。
+
+本地调试：在 `server/.dev.vars` 写入密钥（可用 `DAIERYOU_DATABASE_URL` + `DAIERYOU_DATABASE_SSL=disable` 连本地 Postgres）后运行 `npx wrangler dev`（`.dev.vars` 已被 git 忽略）。
 用 `E2E_EXTERNAL_WS_URL=ws://127.0.0.1:8787 npx playwright test e2e/full-game.spec.js` 可在 Cloudflare 运行时上跑完整对局测试。
 
 ### 3. Vercel（前端）

@@ -16,6 +16,11 @@ class_name = "GameServer"
 tag = "v1"
 new_sqlite_classes = ["GameServer"]
 
+# Supabase 连接走 Hyperdrive（verify-ca，校验 Supabase 私有根证书 supabase/supabase-root-2021-ca.pem）
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "ee552c814e5541038f52d0e600df41a9"
+
 [vars]
 NODE_ENV = "production"
 DAIERYOU_SKIP_MONGO = "1"

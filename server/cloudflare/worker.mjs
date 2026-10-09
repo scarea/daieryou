@@ -42,9 +42,18 @@ export class GameServer extends DurableObject {
     super(ctx, env)
     this.startedAt = Date.now()
     this.runtimeConfig = loadRuntimeConfig(toStringEnv(env))
-    this.pgDatabase = this.runtimeConfig.databaseUrl
-      ? new PgDatabase({ connectionString: this.runtimeConfig.databaseUrl, ssl: this.runtimeConfig.databaseSsl, max: 3 })
+    // 优先使用 Hyperdrive：它负责与 Supabase 的 TLS（verify-ca，校验 Supabase 私有 CA）和连接池，
+    // Worker 到 Hyperdrive 走 Cloudflare 内部链路，无需再配置 TLS。
+    const hyperdriveUrl = env.HYPERDRIVE?.connectionString
+    const connectionString = hyperdriveUrl || this.runtimeConfig.databaseUrl
+    this.pgDatabase = connectionString
+      ? new PgDatabase({
+        connectionString,
+        ssl: hyperdriveUrl ? 'disable' : this.runtimeConfig.databaseSsl,
+        max: 3,
+      })
       : null
+    this.databaseVia = hyperdriveUrl ? 'hyperdrive' : 'direct'
 
     // 未配置数据库时仓库照常创建（database 为空），账号/战绩相关请求会提示“暂不可用”，游客模式不受影响
     this.appContext = setAppContext(createAppContext({
@@ -80,6 +89,15 @@ export class GameServer extends DurableObject {
     this.appContext.battleRecordLifecycleService.start()
   }
 
+  async ensureDatabase() {
+    if (this.pgDatabase && !this.pgDatabase.isReady()) {
+      const connected = await this.pgDatabase.ensureConnected({ migrate: this.runtimeConfig.databaseAutoMigrate })
+      if (connected) {
+        console.log('Postgres 重连成功')
+      }
+    }
+  }
+
   databaseStatus() {
     if (!this.pgDatabase) {
       return 'none'
@@ -91,6 +109,7 @@ export class GameServer extends DurableObject {
     const url = new URL(request.url)
     if (url.pathname === '/healthz') {
       await this.ready
+      await this.ensureDatabase()
       // 顺带写一次数据库心跳：外部保活访问 /healthz 时，Supabase 也会保持活跃
       if (this.pgDatabase?.isReady()) {
         await this.pgDatabase.heartbeat('cloudflare-game-server').catch(() => {})
@@ -100,6 +119,8 @@ export class GameServer extends DurableObject {
         runtime: 'cloudflare-durable-object',
         uptimeSeconds: Math.round((Date.now() - this.startedAt) / 1000),
         database: this.databaseStatus(),
+        databaseVia: this.pgDatabase ? this.databaseVia : undefined,
+        databaseError: this.pgDatabase && !this.pgDatabase.isReady() ? this.pgDatabase.lastError : undefined,
       }, { headers: { 'cache-control': 'no-store', ...CORS_HEADERS } })
     }
 
@@ -108,6 +129,7 @@ export class GameServer extends DurableObject {
     }
 
     await this.ready
+    await this.ensureDatabase()
     const pair = new WebSocketPair()
     const [client, server] = Object.values(pair)
     server.accept()

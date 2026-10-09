@@ -218,7 +218,8 @@ function useLampIntensity(mode) {
   if (mode === 'login') {
     return 0.8
   }
-  if (active) {
+  // 离开房间等情况下 showdown 可能先被清空，而 active 还没来得及复位
+  if (active && showdown?.timeline) {
     return showdown.timeline.isFinal ? 0.22 : 0.6
   }
   return 1

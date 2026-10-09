@@ -47,6 +47,29 @@ const antdTheme = {
   },
 }
 
+// 3D 场景出错时只降级为静态背景，不影响游戏界面（HUD）本身
+class WorldErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { failed: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error) {
+    console.error('3D 场景渲染失败，已降级为静态背景:', error)
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <div className="world-canvas world-canvas-fallback" />
+    }
+    return this.props.children
+  }
+}
+
 const SceneLoader = ({ title = '加载中…' }) => (
   <div className="hud-loader" aria-live="polite">{title}</div>
 )
@@ -132,9 +155,11 @@ function App() {
   return (
     <ConfigProvider locale={zhCN} theme={antdTheme}>
       <div className={`app3d app3d-mode-${mode}`}>
-        <Suspense fallback={<div className="world-canvas world-canvas-fallback" />}>
-          <World mode={mode} />
-        </Suspense>
+        <WorldErrorBoundary>
+          <Suspense fallback={<div className="world-canvas world-canvas-fallback" />}>
+            <World mode={mode} />
+          </Suspense>
+        </WorldErrorBoundary>
         <main className="hud-layer">
           <Suspense fallback={<SceneLoader title="正在加载场景…" />}>
             {sceneNode}
