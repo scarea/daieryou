@@ -1,8 +1,5 @@
-const fs = require('node:fs')
-const path = require('node:path')
 const { Pool } = require('pg')
-
-const SCHEMA_PATH = path.join(__dirname, 'schema.sql')
+const SCHEMA_SQL = require('./schemaSql')
 
 /**
  * Postgres 连接池（用于 Supabase 等托管 Postgres）。
@@ -30,7 +27,7 @@ class PgDatabase {
   async connect({ migrate = true } = {}) {
     await this.pool.query('select 1')
     if (migrate) {
-      await this.pool.query(fs.readFileSync(SCHEMA_PATH, 'utf8'))
+      await this.pool.query(SCHEMA_SQL)
     }
     this.ready = true
   }

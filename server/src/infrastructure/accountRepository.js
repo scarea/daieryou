@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { AccountRepositoryBase } = require('./repositoryBase')
 
 const accountSchema = new mongoose.Schema({
   email: {
@@ -81,15 +82,7 @@ function normalizeMongooseDocument(document) {
   return rest
 }
 
-class AccountRepository {
-  normalizeEmail(email) {
-    if (typeof email !== 'string') {
-      return ''
-    }
-
-    return email.trim().toLowerCase()
-  }
-
+class AccountRepository extends AccountRepositoryBase {
   ensureDatabaseReady() {
     if (mongoose.connection.readyState !== 1) {
       throw new Error('账号系统暂不可用，请检查 MongoDB 连接')

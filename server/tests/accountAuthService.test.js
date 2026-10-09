@@ -559,3 +559,17 @@ test('non-member user should not create invite code', async () => {
     /仅会员用户可生成邀请码/,
   )
 })
+
+test('password hashing should embed iterations and still verify legacy hashes', () => {
+  const crypto = require('node:crypto')
+  const { service } = createFixture({ passwordHashIterations: 20000 })
+  const { salt, hash } = service.hashPassword('Secret123')
+  assert.match(hash, /^pbkdf2_sha256\$20000\$[0-9a-f]{64}$/)
+  assert.equal(service.verifyPassword('Secret123', salt, hash), true)
+  assert.equal(service.verifyPassword('wrong', salt, hash), false)
+
+  // 旧数据：纯 hex，固定 120000 次迭代
+  const legacy = crypto.pbkdf2Sync('Secret123', 'legacy-salt', 120000, 32, 'sha256').toString('hex')
+  assert.equal(service.verifyPassword('Secret123', 'legacy-salt', legacy), true)
+  assert.equal(service.verifyPassword('Secret123', 'legacy-salt', 'pbkdf2_sha256$abc$00'), false)
+})
