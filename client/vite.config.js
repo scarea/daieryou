@@ -11,6 +11,7 @@ export default defineConfig({
           react: ['react', 'react-dom'],
           antd: ['antd', '@ant-design/icons'],
           state: ['zustand'],
+          three: ['three', '@react-three/fiber', '@react-three/drei'],
         },
       },
     },

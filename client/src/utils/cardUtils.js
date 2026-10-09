@@ -1,29 +1,7 @@
-// 从共享模块导入卡牌相关功能
-import { 
-  SUITS, 
-  RANKS, 
-  HAND_TYPES, 
-  createDeck, 
-  shuffleDeck, 
-  getCardName 
-} from '../../../shared/game-rules/cards.js'
+// 牌型判断（含大小王赖子）只在服务端进行，前端只负责展示
+import { SUITS, RANKS, HAND_TYPES, getCardName } from '../../../shared/game-rules/cards.js'
 
-import { 
-  evaluateHand, 
-  compareHands 
-} from '../../../shared/game-rules/hand-evaluator.js'
-
-// 重新导出供前端使用
-export {
-  SUITS,
-  RANKS,
-  HAND_TYPES,
-  createDeck,
-  shuffleDeck,
-  getCardName,
-  evaluateHand,
-  compareHands
-}
+export { SUITS, RANKS, HAND_TYPES, getCardName }
 
 // 前端特有的工具函数
 
@@ -58,27 +36,4 @@ export function getHandTypeName(handType) {
   }
   
   return names[handType] || '未知'
-}
-
-// 比较三手牌，返回排序结果（第一名、第二名、第三名）
-export function rankThreeHands(hands) {
-  if (hands.length !== 3) {
-    throw new Error('必须是3手牌')
-  }
-  
-  // 评估每手牌
-  const evaluatedHands = hands.map((cards, index) => ({
-    index,
-    cards,
-    evaluation: evaluateHand(cards)
-  }))
-  
-  // 排序（从大到小）
-  evaluatedHands.sort((a, b) => compareHands(b.evaluation, a.evaluation))
-  
-  return {
-    first: evaluatedHands[0],   // 第一名
-    second: evaluatedHands[1],  // 第二名（输家）
-    third: evaluatedHands[2]    // 第三名
-  }
 }

@@ -190,6 +190,7 @@ function scheduleReconnect(set, get) {
           gameState: null,
           finalScores: null,
           finalRoundResult: null,
+          finalRoundResults: null,
           latestRoundResult: null,
           battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
           battleStatsRecords: [],
@@ -244,6 +245,7 @@ function bindRealtimeEvents(set, get) {
         gameState: leavingCurrentRoom ? null : state.gameState,
         finalScores: leavingCurrentRoom ? null : state.finalScores,
         finalRoundResult: leavingCurrentRoom ? null : state.finalRoundResult,
+        finalRoundResults: leavingCurrentRoom ? null : state.finalRoundResults,
         latestRoundResult: leavingCurrentRoom ? null : state.latestRoundResult,
         roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
       }
@@ -269,6 +271,7 @@ function bindRealtimeEvents(set, get) {
       gameState,
       finalScores: null,
       finalRoundResult: null,
+      finalRoundResults: null,
       latestRoundResult: null,
       roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
       gameAlert: null,
@@ -305,6 +308,7 @@ function bindRealtimeEvents(set, get) {
     set((state) => ({
       currentRoom: room || state.currentRoom,
       finalScores,
+      finalRoundResults: gameState?.roundResults || state.finalRoundResults || null,
       finalRoundResult: finalRoundResult
         || getFinalRoundResultFromGameState(gameState)
         || state.finalRoundResult
@@ -324,6 +328,7 @@ function bindRealtimeEvents(set, get) {
         gameState: affectsCurrentRoom ? null : state.gameState,
         finalScores: affectsCurrentRoom ? null : state.finalScores,
         finalRoundResult: affectsCurrentRoom ? null : state.finalRoundResult,
+        finalRoundResults: affectsCurrentRoom ? null : state.finalRoundResults,
         latestRoundResult: affectsCurrentRoom ? null : state.latestRoundResult,
         roomList: room ? syncRoomList(state.roomList, room) : state.roomList,
         gameAlert: affectsCurrentRoom ? reason : state.gameAlert,
@@ -366,6 +371,7 @@ const useGameStore = create((set, get) => ({
   latestRoundResult: null,
   finalScores: null,
   finalRoundResult: null,
+  finalRoundResults: null,
   gameAlert: null,
   accountInfo: null,
   authConfig: DEFAULT_AUTH_CONFIG,
@@ -436,6 +442,7 @@ const useGameStore = create((set, get) => ({
         gameState: null,
         finalScores: null,
         finalRoundResult: null,
+        finalRoundResults: null,
         battleStatsSummary: DEFAULT_BATTLE_STATS_SUMMARY,
         battleStatsRecords: [],
         battleStatsTrend: [],
@@ -491,6 +498,7 @@ const useGameStore = create((set, get) => ({
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
       finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
+      finalRoundResults: payload.finalRoundResults || payload.gameState?.roundResults || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -520,6 +528,7 @@ const useGameStore = create((set, get) => ({
       gameState: null,
       finalScores: null,
       finalRoundResult: null,
+      finalRoundResults: null,
       latestRoundResult: null,
       gameAlert: null,
     })
@@ -528,7 +537,7 @@ const useGameStore = create((set, get) => ({
 
   joinRoom: async (roomId) => {
     const { room } = await gameService.joinRoom(roomId)
-    set({ currentRoom: room, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
+    set({ currentRoom: room, finalScores: null, finalRoundResult: null, finalRoundResults: null, latestRoundResult: null, gameAlert: null })
     return room
   },
 
@@ -582,6 +591,7 @@ const useGameStore = create((set, get) => ({
       gameState: null,
       finalScores: null,
       finalRoundResult: null,
+      finalRoundResults: null,
       latestRoundResult: null,
       gameAlert: null,
     })
@@ -595,13 +605,16 @@ const useGameStore = create((set, get) => ({
 
   startGame: async (roomId) => {
     const { gameState } = await gameService.startGame(roomId)
-    set({ gameState, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
+    set({ gameState, finalScores: null, finalRoundResult: null, finalRoundResults: null, latestRoundResult: null, gameAlert: null })
     return gameState
   },
 
+  // 再来一局 = 我已准备；全员准备后服务端开新局并推送 gameStarted
   restartGame: async (roomId) => {
     const { gameState } = await gameService.restartGame(roomId)
-    set({ gameState, finalScores: null, finalRoundResult: null, latestRoundResult: null, gameAlert: null })
+    if (gameState) {
+      set({ gameState, finalScores: null, finalRoundResult: null, finalRoundResults: null, latestRoundResult: null, gameAlert: null })
+    }
     return gameState
   },
 
@@ -679,6 +692,7 @@ const useGameStore = create((set, get) => ({
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
       finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
+      finalRoundResults: payload.finalRoundResults || payload.gameState?.roundResults || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -716,6 +730,7 @@ const useGameStore = create((set, get) => ({
       gameState: payload.gameState || null,
       finalScores: payload.finalScores || null,
       finalRoundResult: payload.finalRoundResult || getFinalRoundResultFromGameState(payload.gameState) || null,
+      finalRoundResults: payload.finalRoundResults || payload.gameState?.roundResults || null,
       latestRoundResult: null,
       roomList: payload.rooms || state.roomList,
       isConnected: true,
@@ -860,6 +875,7 @@ const useGameStore = create((set, get) => ({
           gameState: null,
           finalScores: null,
           finalRoundResult: null,
+          finalRoundResults: null,
           latestRoundResult: null,
           gameAlert: null,
         })
@@ -872,13 +888,14 @@ const useGameStore = create((set, get) => ({
       gameState: null,
       finalScores: null,
       finalRoundResult: null,
+      finalRoundResults: null,
       latestRoundResult: null,
       gameAlert: null,
     })
   },
 
   backToLobby: () => {
-    set({ currentRoom: null, gameState: null, finalScores: null, finalRoundResult: null, latestRoundResult: null })
+    set({ currentRoom: null, gameState: null, finalScores: null, finalRoundResult: null, finalRoundResults: null, latestRoundResult: null })
   },
 }))
 

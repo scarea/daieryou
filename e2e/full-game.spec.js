@@ -111,6 +111,14 @@ function stopProcess(processHandle) {
   })
 }
 
+// 测试环境：低画质 + 减少动效（结算演出缩短），并跳过新手引导
+async function prepareFastClient(context) {
+  await context.addInitScript(() => {
+    window.localStorage.setItem('daieryou_settings_v1', JSON.stringify({ quality: 'low', reducedMotion: true, muted: true }))
+    window.localStorage.setItem('daieryou_coach_done_v1', '1')
+  })
+}
+
 async function login(page, username) {
   await page.goto(APP_URL)
   await page.getByTestId('login-username-input').fill(username)
@@ -118,21 +126,13 @@ async function login(page, username) {
   await expect(page.getByText('游戏大厅')).toBeVisible()
 }
 
-async function dismissRoundModalIfVisible(page) {
+async function continueRoundResult(page, timeout = 10000) {
   const continueButton = page.getByTestId('round-result-continue')
-  const visible = await continueButton
-    .isVisible({ timeout: 1200 })
-    .catch(() => false)
-
-  if (visible) {
-    await continueButton.click({ timeout: 1200, force: true }).catch(() => {})
-  }
-}
-
-async function drainRoundModal(page) {
-  for (let index = 0; index < 4; index += 1) {
-    await dismissRoundModalIfVisible(page)
-    await page.waitForTimeout(120)
+  try {
+    await continueButton.waitFor({ state: 'visible', timeout })
+    await continueButton.click({ timeout: 2000 })
+  } catch (error) {
+    // 结果条可能已自动收起
   }
 }
 
@@ -149,13 +149,18 @@ async function assertRoundResultScoreDisplay(page) {
     .filter({ has: page.locator('.round-result-rank-badge', { hasText: '末位' }) })
     .first()
 
-  await expect(secondPlaceCard.locator('.score-change-pill')).toContainText('-', { timeout: 3000 })
-  await expect(thirdPlaceCard.locator('.score-change-pill')).toContainText('+', { timeout: 3000 })
+  // 出现并列时可能没有“末位”（后两名并列）或三家全平，此时不做分数方向断言
+  if (await secondPlaceCard.count() > 0) {
+    await expect(secondPlaceCard.locator('.score-change-pill')).toContainText('-', { timeout: 3000 })
+  }
+  if (await thirdPlaceCard.count() > 0) {
+    await expect(thirdPlaceCard.locator('.score-change-pill')).toContainText('+', { timeout: 3000 })
+  }
 }
 
 async function assertFinalRoundReveal(page) {
   const finalRevealCard = page.locator('.result-final-reveal-card')
-  await expect(finalRevealCard).toBeVisible()
+  await expect(finalRevealCard).toBeVisible({ timeout: 20000 })
   await expect(finalRevealCard.locator('.round-result-player-card')).toHaveCount(3)
 }
 
@@ -200,7 +205,6 @@ async function assertViewportNoPageScroll(page) {
 }
 
 async function submitRoundCards(page) {
-  await drainRoundModal(page)
   await expect(page.getByTestId('confirm-selection-button')).toBeVisible()
   const selectedCardNames = [
     normalizeCardName(await page.getByTestId('hand-card-0').textContent()),
@@ -252,6 +256,7 @@ test('three players should finish one game and restart in same room', async ({ b
   const hostContext = await browser.newContext()
   const playerBContext = await browser.newContext()
   const playerCContext = await browser.newContext()
+  await Promise.all([hostContext, playerBContext, playerCContext].map(prepareFastClient))
 
   const hostPage = await hostContext.newPage()
   const playerBPage = await playerBContext.newPage()
@@ -295,7 +300,7 @@ test('three players should finish one game and restart in same room', async ({ b
       if (round < 4) {
         await assertRoundResultScoreDisplay(hostPage)
       }
-      await Promise.all(pages.map((page) => drainRoundModal(page)))
+      await Promise.all(pages.map((page) => continueRoundResult(page)))
 
       if (round < 4) {
         await assertViewportNoPageScroll(hostPage)
@@ -308,7 +313,10 @@ test('three players should finish one game and restart in same room', async ({ b
     await Promise.all(pages.map((page) => page.getByTestId('final-reveal-continue-button').click()))
     await Promise.all(pages.map((page) => expect(page.getByText('游戏结束')).toBeVisible()))
 
-    await hostPage.getByTestId('play-again-button').click()
+    // 再来一局需要三位玩家都准备
+    for (const page of pages) {
+      await page.getByTestId('play-again-button').click()
+    }
     await Promise.all(
       pages.map((page) => expect(page.getByTestId('round-indicator')).toContainText('第 1 / 5 轮')),
     )
