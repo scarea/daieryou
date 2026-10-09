@@ -1,0 +1,23 @@
+# Render Blueprint：游戏服务端（WebSocket）部署到 Render 免费 Web Service
+# 文档见 docs/deploy-free.md
+services:
+  - type: web
+    name: daieryou-server
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # 由 Render 自动生成随机密钥，无需手动填写
+      - key: DAIERYOU_SESSION_TOKEN_SECRET
+        generateValue: true
+      # Supabase 的 Postgres 连接串（Session pooler），在 Render 控制台手动填写
+      - key: DAIERYOU_DATABASE_URL
+        sync: false
+      - key: DAIERYOU_SKIP_MONGO
+        value: "1"

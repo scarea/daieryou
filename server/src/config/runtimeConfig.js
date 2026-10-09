@@ -83,7 +83,8 @@ function loadRuntimeConfig(env = process.env) {
   assertSessionTokenSecret(sessionTokenSecret, env)
 
   return {
-    wsPort: parsePositiveNumber(env.DAIERYOU_WS_PORT, network.wsPort || 3014),
+    // 托管平台（Render 等）通过 PORT 指定监听端口
+    wsPort: parsePositiveNumber(env.PORT, parsePositiveNumber(env.DAIERYOU_WS_PORT, network.wsPort || 3014)),
     maxWsPayloadBytes: parsePositiveNumber(
       env.DAIERYOU_WS_MAX_PAYLOAD_BYTES,
       network.maxWsPayloadBytes || 65536,
@@ -105,6 +106,15 @@ function loadRuntimeConfig(env = process.env) {
       network.requestDedupMaxEntries || 20000,
     ),
     mongoUri: env.DAIERYOU_MONGO_URI || database.mongoUri || 'mongodb://localhost:27017/daieryou',
+    // 配置了 Postgres 连接串（如 Supabase）时使用 Postgres 存储，否则使用 MongoDB
+    databaseUrl: parseNonEmptyString(env.DAIERYOU_DATABASE_URL, database.databaseUrl || ''),
+    databaseSsl: parseNonEmptyString(env.DAIERYOU_DATABASE_SSL, database.databaseSsl || 'require'),
+    databaseAutoMigrate: parseBoolean(env.DAIERYOU_DATABASE_AUTO_MIGRATE, database.autoMigrate ?? true),
+    // 定期写数据库心跳，防止免费托管数据库因“不活跃”被暂停
+    databaseHeartbeatIntervalMs: parsePositiveNumber(
+      env.DAIERYOU_DATABASE_HEARTBEAT_INTERVAL_MS,
+      database.heartbeatIntervalMs || 6 * 60 * 60 * 1000,
+    ),
     skipMongo: parseBoolean(env.DAIERYOU_SKIP_MONGO, database.skipMongo ?? false),
     disconnectGraceMs: parsePositiveNumber(
       env.DAIERYOU_DISCONNECT_GRACE_MS,

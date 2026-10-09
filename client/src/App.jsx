@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { ConfigProvider, theme as antdThemeAlgorithms } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import useGameStore from './store/gameStore'
@@ -50,6 +50,40 @@ const antdTheme = {
 const SceneLoader = ({ title = '加载中…' }) => (
   <div className="hud-loader" aria-live="polite">{title}</div>
 )
+
+// 免费服务器休眠后的首次访问：显示唤醒进度，避免玩家以为页面卡死
+const ServerWakeNotice = () => {
+  const serverWakeStatus = useGameStore((state) => state.serverWakeStatus)
+  const serverWakeStartedAt = useGameStore((state) => state.serverWakeStartedAt)
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    if (serverWakeStatus !== 'waking') {
+      return undefined
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [serverWakeStatus])
+
+  if (serverWakeStatus === 'waking') {
+    const seconds = Math.max(0, Math.round((now - (serverWakeStartedAt || now)) / 1000))
+    return (
+      <div className="server-wake-notice" role="status" aria-live="polite">
+        <strong>正在唤醒牌桌服务器… {seconds}s</strong>
+        <span>服务器空闲时会休眠，首次进入大约需要 1 分钟，请稍候</span>
+      </div>
+    )
+  }
+  if (serverWakeStatus === 'failed') {
+    return (
+      <div className="server-wake-notice is-failed" role="alert">
+        <strong>服务器暂时无法连接</strong>
+        <span>请稍后刷新页面重试</span>
+      </div>
+    )
+  }
+  return null
+}
 
 function resolveSceneMode({ bootstrapStatus, isLoggedIn, currentRoom, gameState, finalScores }) {
   if (bootstrapStatus !== 'ready') {
@@ -106,6 +140,7 @@ function App() {
             {sceneNode}
           </Suspense>
         </main>
+        <ServerWakeNotice />
         <SettingsButton />
       </div>
     </ConfigProvider>
