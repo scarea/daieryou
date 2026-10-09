@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Input, List, Modal, Pagination, Select, Space, Tag, Typography, message } from 'antd'
-import { PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { Button, Card, Drawer, Input, List, Modal, Pagination, Select, Space, Tag, Typography, message } from 'antd'
+import {
+  CrownOutlined,
+  LogoutOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RobotOutlined,
+  SettingOutlined,
+  TrophyOutlined,
+} from '@ant-design/icons'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import useGameStore from '../store/gameStore'
 
@@ -109,6 +117,7 @@ const RoomScene = () => {
   const [adminTargetEmail, setAdminTargetEmail] = useState('')
   const [adminDurationDays, setAdminDurationDays] = useState(String(authConfig?.memberDefaultDays || 30))
   const [adminReason, setAdminReason] = useState('')
+  const [activeDrawer, setActiveDrawer] = useState(null)
 
   useEffect(() => {
     if (!currentRoom && roomList.length === 0) {
@@ -548,77 +557,81 @@ const RoomScene = () => {
     const botPlayers = currentRoom.players.filter((player) => player.isBot === true)
     const canManageBots = isHost && isWaiting
     const isRoomFull = currentRoom.players.length >= 3
+    const timeoutSeconds = Math.max(10, Math.floor((currentRoom.selectionTimeoutMs || 60000) / 1000))
 
     return (
-      <Card className="scene-card room-scene-card room-current-card" style={{ width: 'min(100%, 760px)' }}>
-        <header className="room-header">
-          <Title level={3} className="scene-hero-title">房间: {currentRoom.id.slice(0, 8)}</Title>
-          <Text className="scene-hero-subtitle">
-            {isWaiting ? '等待其他玩家加入...' : '本局已结束或中止，可等待房主重新开始'}
-            {' · '}
-            选牌时限 {Math.max(10, Math.floor((currentRoom.selectionTimeoutMs || 60000) / 1000))} 秒
+      <div className="hud-room">
+        <Card className="hud-panel hud-room-info" variant="borderless">
+          <span className="hud-kicker">TABLE {currentRoom.id.slice(0, 8).toUpperCase()}</span>
+          <Title level={3} className="hud-title">
+            {isWaiting ? `等待入座 ${currentRoom.players.length}/3` : '本局已结束'}
+          </Title>
+          <Text className="hud-subtitle">
+            {isWaiting ? '凑齐三人即可开局，空位可以用 AI 补上' : '可等待房主重新开始'}
+            {' · '}选牌时限 {timeoutSeconds} 秒
           </Text>
-        </header>
 
-        <ConnectionStatusBanner
-          className="scene-stack-gap"
-          gameAlert={gameAlert}
-          onClose={clearGameAlert}
-          isConnected={isConnected}
-          isReconnecting={isReconnecting}
-          reconnectAttempts={reconnectAttempts}
-          reconnectNextRetryAt={reconnectNextRetryAt}
-        />
+          <ConnectionStatusBanner
+            className="hud-stack-gap"
+            gameAlert={gameAlert}
+            onClose={clearGameAlert}
+            isConnected={isConnected}
+            isReconnecting={isReconnecting}
+            reconnectAttempts={reconnectAttempts}
+            reconnectNextRetryAt={reconnectNextRetryAt}
+          />
 
-        <section className="scene-section">
-          <Title level={4} className="scene-section-title">
+          <div className="hud-section-label">
             玩家列表 ({currentRoom.players.length}/3)
             {botPlayers.length > 0 && ` · AI ${botPlayers.length}`}
-          </Title>
-          <List
-            className="room-player-list"
-            dataSource={currentRoom.players}
-            renderItem={(player) => (
-              <List.Item className="room-player-row">
-                <Space size={12} wrap>
-                  <UserOutlined />
-                  <Text strong={player.id === user?.id}>
-                    {player.username}
-                    {player.id === user?.id && ' (你)'}
-                  </Text>
-                  {player.isBot === true && <Tag color="cyan">AI</Tag>}
-                  {player.isBot === true && <Tag color="geekblue">{getBotDifficultyLabel(player.botDifficulty)}</Tag>}
-                  {player.id === currentRoom.hostId && <Tag className="room-status-chip" color="gold">房主</Tag>}
+          </div>
+          <ul className="hud-room-players">
+            {currentRoom.players.map((player) => (
+              <li key={player.id} className={player.id === user?.id ? 'is-self' : ''}>
+                <span className="hud-room-player-name">
+                  {player.username}
+                  {player.id === user?.id && ' (你)'}
+                </span>
+                <span className="hud-room-player-tags">
+                  {player.isBot === true && <Tag color="cyan">AI · {getBotDifficultyLabel(player.botDifficulty)}</Tag>}
+                  {player.id === currentRoom.hostId && <Tag color="gold">房主</Tag>}
                   {player.online === false && <Tag color="red">离线</Tag>}
-                  <Text className="scene-hero-subtitle">积分: {player.score}</Text>
-                  {canManageBots && player.isBot === true && (
-                    <Button
-                      size="small"
-                      danger
-                      loading={removingBotId === player.id}
-                      data-testid={`remove-bot-${player.id}`}
-                      onClick={() => handleRemoveBot(player)}
-                    >
-                      移除 AI
-                    </Button>
-                  )}
-                </Space>
-              </List.Item>
-            )}
-          />
-        </section>
+                </span>
+                <span className="hud-room-player-score">{player.score}</span>
+                {canManageBots && player.isBot === true && (
+                  <Button
+                    size="small"
+                    danger
+                    type="text"
+                    loading={removingBotId === player.id}
+                    data-testid={`remove-bot-${player.id}`}
+                    onClick={() => handleRemoveBot(player)}
+                  >
+                    移除
+                  </Button>
+                )}
+              </li>
+            ))}
+            {Array.from({ length: Math.max(0, 3 - currentRoom.players.length) }).map((_, index) => (
+              <li key={`empty-${index}`} className="is-empty">
+                <span className="hud-room-player-name">空位</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
 
-        {canManageBots && (
-          <div className="room-action-row" style={{ marginTop: 0 }}>
-            <Space wrap>
+        <div className="hud-panel hud-action-dock">
+          {canManageBots && (
+            <Space.Compact>
               <Select
                 value={botDifficulty}
-                style={{ width: 140 }}
+                style={{ width: 110 }}
                 options={BOT_DIFFICULTY_OPTIONS}
                 onChange={setBotDifficulty}
+                aria-label="AI 难度"
               />
               <Button
-                className="scene-subtle-btn scene-action-btn"
+                icon={<RobotOutlined />}
                 data-testid="add-bot-button"
                 loading={addBotLoading}
                 disabled={isRoomFull}
@@ -626,18 +639,16 @@ const RoomScene = () => {
               >
                 {isRoomFull ? '房间已满' : '添加 AI'}
               </Button>
-            </Space>
-          </div>
-        )}
-
-        <div className="room-action-row">
+            </Space.Compact>
+          )}
           <Button
             type="primary"
             size="large"
-            className="scene-primary-btn scene-action-btn"
+            className="hud-cta"
             data-testid="start-game-button"
             disabled={currentRoom.players.length < 3 || !isHost || !isWaiting || hasOfflinePlayer}
             onClick={handleStartGame}
+            loading={loading}
           >
             {currentRoom.players.length < 3
               ? `等待玩家 (${currentRoom.players.length}/3)`
@@ -649,29 +660,47 @@ const RoomScene = () => {
                     ? '等待重新开局'
                     : '开始游戏'}
           </Button>
-
           <Button
             size="large"
-            className="scene-subtle-btn scene-action-btn"
+            icon={<LogoutOutlined />}
             data-testid="leave-room-button"
             onClick={handleLeaveRoom}
           >
-            离开房间
+            离开
           </Button>
         </div>
-      </Card>
+      </div>
     )
   }
 
+  const showMember = authConfig?.emailEnabled !== false && Boolean(accountInfo)
+  const isAdmin = accountInfo?.isAdmin === true
+
   return (
-    <Card className="scene-card room-scene-card lobby-scene-card" style={{ width: 'min(100%, 960px)' }}>
-      <header className="room-header">
-        <Title level={3} className="scene-hero-title">游戏大厅</Title>
-        <Text className="scene-hero-subtitle">欢迎 {user?.username}，选择或创建房间开始游戏</Text>
+    <div className="hud-lobby">
+      <header className="hud-panel hud-topbar">
+        <div className="hud-brand">
+          <span className="hud-brand-mark">逮</span>
+          <div>
+            <strong>游戏大厅</strong>
+            <span>欢迎 {user?.username}，选张桌子坐下吧</span>
+          </div>
+        </div>
+        <Space wrap size={8}>
+          <Button icon={<TrophyOutlined />} onClick={() => setActiveDrawer('stats')}>战绩</Button>
+          {showMember && (
+            <Button icon={<CrownOutlined />} onClick={() => setActiveDrawer('member')}>
+              {accountInfo?.isMember ? '会员中' : '会员中心'}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button icon={<SettingOutlined />} onClick={() => setActiveDrawer('admin')}>管理台</Button>
+          )}
+        </Space>
       </header>
 
       <ConnectionStatusBanner
-        className="scene-stack-gap"
+        className="hud-stack-gap"
         gameAlert={gameAlert}
         onClose={clearGameAlert}
         isConnected={isConnected}
@@ -680,97 +709,112 @@ const RoomScene = () => {
         reconnectNextRetryAt={reconnectNextRetryAt}
       />
 
-      <div className="lobby-actions">
-        <Select
-          value={roundSelectionTimeoutSec}
-          style={{ width: 140 }}
-          options={ROUND_TIMEOUT_OPTIONS}
-          onChange={setRoundSelectionTimeoutSec}
-        />
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          className="scene-accent-btn scene-action-btn"
-          loading={loading}
-          data-testid="create-room-button"
-          onClick={handleCreateRoom}
-        >
-          创建房间
-        </Button>
-
-        <Button className="scene-subtle-btn scene-action-btn" loading={refreshing} onClick={handleRefreshRooms}>
-          刷新列表
-        </Button>
-      </div>
-
-      <section className="scene-section">
-        <Title level={4} className="scene-section-title">单机与调试</Title>
-        <Space wrap size={10}>
-          <Select
-            value={botDifficulty}
-            style={{ width: 140 }}
-            options={BOT_DIFFICULTY_OPTIONS}
-            onChange={setBotDifficulty}
-          />
-          <Button
-            type="primary"
-            className="scene-primary-btn scene-action-btn"
-            data-testid="create-solo-game-button"
-            loading={soloLoading}
-            onClick={() => handleCreateSoloGame({ autoStart: true })}
-          >
-            单机开局（1人+2AI）
-          </Button>
-          <Button
-            className="scene-subtle-btn scene-action-btn"
-            data-testid="create-solo-debug-room-button"
-            loading={soloLoading}
-            onClick={() => handleCreateSoloGame({ autoStart: false })}
-          >
-            创建调试房（1人+2AI）
-          </Button>
-        </Space>
-      </section>
-
-      {authConfig?.emailEnabled !== false && accountInfo && (
-        <section className="scene-section">
-          <Title level={4} className="scene-section-title">会员中心</Title>
-          <Space size={10} wrap style={{ marginBottom: 12 }}>
-            {accountInfo?.isMember ? (
-              <Tag color="gold">
-                会员中（到期：{accountInfo?.memberExpiresAt ? new Date(accountInfo.memberExpiresAt).toLocaleString() : '长期'}）
-              </Tag>
-            ) : (
-              <Tag>普通账号</Tag>
-            )}
-            {accountInfo?.isAdmin === true && <Tag color="purple">管理员</Tag>}
-          </Space>
-          <Space size={12} wrap>
+      <div className="hud-lobby-grid">
+        <Card className="hud-panel hud-lobby-create" variant="borderless">
+          <span className="hud-kicker">NEW TABLE</span>
+          <Title level={3} className="hud-title">开一桌</Title>
+          <div className="hud-field">
+            <label htmlFor="lobby-timeout">选牌时限</label>
+            <Select
+              id="lobby-timeout"
+              value={roundSelectionTimeoutSec}
+              options={ROUND_TIMEOUT_OPTIONS}
+              onChange={setRoundSelectionTimeoutSec}
+            />
+          </div>
+          <div className="hud-field">
+            <label htmlFor="lobby-bot-difficulty">AI 难度</label>
+            <Select
+              id="lobby-bot-difficulty"
+              value={botDifficulty}
+              options={BOT_DIFFICULTY_OPTIONS}
+              onChange={setBotDifficulty}
+            />
+          </div>
+          <div className="hud-lobby-create-actions">
             <Button
               type="primary"
-              className="scene-primary-btn scene-action-btn"
-              loading={memberLoading}
-              onClick={handlePurchaseMembership}
+              size="large"
+              block
+              className="hud-cta"
+              data-testid="create-solo-game-button"
+              loading={soloLoading}
+              onClick={() => handleCreateSoloGame({ autoStart: true })}
             >
-              {accountInfo?.isMember
-                ? `续费 ${authConfig?.memberDefaultDays || 30} 天会员`
-                : `开通 ${authConfig?.memberDefaultDays || 30} 天会员`}
+              单机开局（你 + 2 AI）
             </Button>
-            {accountInfo?.isMember === true && (
-              <Button
-                className="scene-subtle-btn scene-action-btn"
-                loading={inviteLoading}
-                onClick={handleCreateInviteCode}
-              >
-                生成邀请码
-              </Button>
-            )}
-          </Space>
-        </section>
-      )}
+            <Button
+              size="large"
+              block
+              icon={<PlusOutlined />}
+              loading={loading}
+              data-testid="create-room-button"
+              onClick={handleCreateRoom}
+            >
+              创建多人房间
+            </Button>
+            <Button
+              type="text"
+              block
+              data-testid="create-solo-debug-room-button"
+              loading={soloLoading}
+              onClick={() => handleCreateSoloGame({ autoStart: false })}
+            >
+              创建调试房（1人+2AI，手动开始）
+            </Button>
+          </div>
+        </Card>
 
-      <section className="scene-section">
-        <Title level={4} className="scene-section-title">战绩总览</Title>
+        <Card className="hud-panel hud-lobby-rooms" variant="borderless">
+          <div className="hud-panel-head">
+            <div>
+              <span className="hud-kicker">OPEN TABLES</span>
+              <Title level={3} className="hud-title">可用房间</Title>
+            </div>
+            <Button icon={<ReloadOutlined />} loading={refreshing} onClick={handleRefreshRooms}>
+              刷新
+            </Button>
+          </div>
+          {roomList.length === 0 ? (
+            <div className="hud-empty">暂无可用房间，创建一个开始游戏吧！</div>
+          ) : (
+            <ul className="hud-room-list">
+              {roomList.map((room) => (
+                <li key={room.id} className="hud-room-item">
+                  <div className="hud-room-seats" aria-hidden="true">
+                    {[0, 1, 2].map((index) => (
+                      <span key={index} className={index < room.playerCount ? 'is-taken' : ''} />
+                    ))}
+                  </div>
+                  <div className="hud-room-meta">
+                    <strong>房间 {room.id.slice(0, 8)}</strong>
+                    <span>
+                      在线 {room.onlineCount}/{room.playerCount} · AI {room.botCount || 0} · {Math.max(10, Math.floor((room.selectionTimeoutMs || 60000) / 1000))} 秒 · {new Date(room.createdAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <Button
+                    type="primary"
+                    loading={loading}
+                    data-testid={`join-room-${room.id}`}
+                    onClick={() => handleJoinRoom(room.id)}
+                  >
+                    加入
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <Drawer
+        title="战绩总览"
+        width={Math.min(720, typeof window !== 'undefined' ? window.innerWidth : 720)}
+        open={activeDrawer === 'stats'}
+        onClose={() => setActiveDrawer(null)}
+        className="hud-drawer"
+      >
+      <section className="hud-drawer-section">
         <Space size={8} wrap style={{ marginBottom: 12 }}>
           <Tag color="blue">总局数: {battleStatsSummary?.totalGames || 0}</Tag>
           <Tag color="green">胜场: {battleStatsSummary?.winCount || 0}</Tag>
@@ -874,9 +918,66 @@ const RoomScene = () => {
         />
       </section>
 
+      </Drawer>
+
+      <Drawer
+        title="会员中心"
+        width={Math.min(480, typeof window !== 'undefined' ? window.innerWidth : 480)}
+        open={activeDrawer === 'member'}
+        onClose={() => setActiveDrawer(null)}
+        className="hud-drawer"
+      >
+      {authConfig?.emailEnabled !== false && accountInfo && (
+        <section className="hud-drawer-section">
+          <Space size={10} wrap style={{ marginBottom: 12 }}>
+            {accountInfo?.isMember ? (
+              <Tag color="gold">
+                会员中（到期：{accountInfo?.memberExpiresAt ? new Date(accountInfo.memberExpiresAt).toLocaleString() : '长期'}）
+              </Tag>
+            ) : (
+              <Tag>普通账号</Tag>
+            )}
+            {accountInfo?.isAdmin === true && <Tag color="purple">管理员</Tag>}
+          </Space>
+          <Space size={12} wrap>
+            {authConfig?.memberSelfServicePurchaseEnabled === true ? (
+              <Button
+                type="primary"
+                className="scene-primary-btn scene-action-btn"
+                loading={memberLoading}
+                onClick={handlePurchaseMembership}
+              >
+                {accountInfo?.isMember
+                  ? `续费 ${authConfig?.memberDefaultDays || 30} 天会员`
+                  : `开通 ${authConfig?.memberDefaultDays || 30} 天会员`}
+              </Button>
+            ) : (
+              <Text type="secondary">会员暂不支持自助开通，请联系管理员</Text>
+            )}
+            {accountInfo?.isMember === true && (
+              <Button
+                className="scene-subtle-btn scene-action-btn"
+                loading={inviteLoading}
+                onClick={handleCreateInviteCode}
+              >
+                生成邀请码
+              </Button>
+            )}
+          </Space>
+        </section>
+      )}
+
+      </Drawer>
+
+      <Drawer
+        title="管理台"
+        width={Math.min(760, typeof window !== 'undefined' ? window.innerWidth : 760)}
+        open={activeDrawer === 'admin'}
+        onClose={() => setActiveDrawer(null)}
+        className="hud-drawer"
+      >
       {accountInfo?.isAdmin === true && (
-        <section className="scene-section">
-          <Title level={4} className="scene-section-title">管理台（最小版）</Title>
+        <section className="hud-drawer-section">
           <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 12 }}>
             <Space wrap>
               <Input
@@ -982,44 +1083,8 @@ const RoomScene = () => {
         </section>
       )}
 
-      <section className="scene-section">
-        <Title level={4} className="scene-section-title">可用房间</Title>
-        {roomList.length === 0 ? (
-          <div className="scene-empty-state">
-            暂无可用房间，创建一个开始游戏吧！
-          </div>
-        ) : (
-          <List
-            className="lobby-room-list"
-            dataSource={roomList}
-            renderItem={(room) => (
-              <List.Item
-                className="lobby-room-item"
-                actions={[
-                  <Button
-                    key={room.id}
-                    type="primary"
-                    size="small"
-                    className="scene-primary-btn"
-                    loading={loading}
-                    data-testid={`join-room-${room.id}`}
-                    onClick={() => handleJoinRoom(room.id)}
-                  >
-                    加入
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={<UserOutlined />}
-                  title={`房间 ${room.id.slice(0, 8)}`}
-                  description={`在线: ${room.onlineCount}/${room.playerCount} | AI: ${room.botCount || 0} | 选牌时限: ${Math.max(10, Math.floor((room.selectionTimeoutMs || 60000) / 1000))} 秒 | 创建时间: ${new Date(room.createdAt).toLocaleTimeString()}`}
-                />
-              </List.Item>
-            )}
-          />
-        )}
-      </section>
-    </Card>
+      </Drawer>
+    </div>
   )
 }
 

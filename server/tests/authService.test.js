@@ -169,3 +169,49 @@ test('login should include final round reveal when resuming a finished room', as
   assert.deepEqual(payload.finalRoundResult, finalRoundResult)
   assert.equal(payload.finalRoundResult.playerResults.length, 3)
 })
+
+test('resumed login should keep existing room or account name instead of requested one', async () => {
+  const room = {
+    id: 'room-rename',
+    hostId: 'u1',
+    status: 'playing',
+    players: [
+      { id: 'u1', username: 'Host', score: 1000, online: false },
+      { id: 'u2', username: 'B', score: 1000, online: true },
+    ],
+  }
+  const onlineCalls = []
+  const service = new AuthService({
+    sessionRepository: { bindUser() {} },
+    roomService: {
+      setUserOnline(user) {
+        onlineCalls.push(user)
+        return null
+      },
+      setUserOffline() {},
+      cleanupUserFromRooms() {},
+    },
+    roomRepository: {
+      findByUserId(userId) {
+        return userId === 'u1' ? room : null
+      },
+    },
+    accountRepository: {
+      async findByUserId(userId) {
+        return userId === 'acc-1' ? { userId: 'acc-1', username: 'AccountName' } : null
+      },
+    },
+    lobbyBroadcaster: { buildRoomList: () => [] },
+    sessionTokenSecret: 'test-secret',
+  })
+
+  const inRoom = await service.login('B', createSession('s-rename-1'), service.issueSessionToken('u1'))
+  assert.equal(inRoom.user.username, 'Host')
+  assert.equal(onlineCalls[0].username, 'Host')
+
+  const account = await service.login('Impostor', createSession('s-rename-2'), service.issueSessionToken('acc-1'))
+  assert.equal(account.user.username, 'AccountName')
+
+  const fresh = await service.login('NewGuest', createSession('s-rename-3'))
+  assert.equal(fresh.user.username, 'NewGuest')
+})

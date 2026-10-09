@@ -14,7 +14,7 @@ function createSession() {
   }
 }
 
-function createFixture() {
+function createFixture(serviceOptions = {}) {
   const accounts = new Map()
   const auditLogs = []
   const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -202,6 +202,7 @@ function createFixture() {
     maxVerifyAttempts: 5,
     exposeDevCode: true,
     codeHashSecret: 'unit-test-secret',
+    ...serviceOptions,
   })
 
   return {
@@ -323,8 +324,33 @@ test('account auth should rollback invite code when verification code is invalid
   assert.equal(inviteCode.usedCount, 0)
 })
 
-test('account auth should purchase and renew membership', async () => {
+test('account auth should reject self-service membership purchase by default', async () => {
   const { service, accountRepository, auditLogs } = createFixture()
+
+  await accountRepository.create({
+    email: 'freeloader@example.com',
+    userId: 'freeloader-user',
+    username: 'Freeloader',
+    passwordSalt: 'salt',
+    passwordHash: 'hash',
+    verifiedAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    isMember: false,
+  })
+
+  await assert.rejects(
+    () => service.purchaseMembership({ id: 'freeloader-user' }, { planDays: 30 }),
+    /会员自助开通暂未开放/,
+  )
+  const account = await accountRepository.findByUserId('freeloader-user')
+  assert.equal(account.isMember, false)
+  assert.equal(auditLogs.some((log) => log.action === 'membership.purchase'), false)
+  assert.equal((await service.getAuthConfig()).memberSelfServicePurchaseEnabled, false)
+})
+
+test('account auth should purchase and renew membership', async () => {
+  const { service, accountRepository, auditLogs } = createFixture({ memberSelfServicePurchaseEnabled: true })
 
   await accountRepository.create({
     email: 'buyer@example.com',

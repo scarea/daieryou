@@ -32,6 +32,28 @@ class GameService {
       ? roundSelectionTimeoutMs
       : 30000
     this.roundTimers = new Map()
+    this.roomLocks = new Map()
+  }
+
+  // 同一房间的对局操作（开局/选牌/超时结算）串行执行。
+  // 这些流程中间有 await，交错执行会导致同一回合被重复结算、gameState 被提前清空。
+  runExclusive(roomId, task) {
+    const key = String(roomId)
+    const previous = this.roomLocks.get(key) || Promise.resolve()
+    const run = previous.then(() => task())
+    const tail = run.catch(() => {})
+    this.roomLocks.set(key, tail)
+    tail.then(() => {
+      if (this.roomLocks.get(key) === tail) {
+        this.roomLocks.delete(key)
+      }
+    })
+    return run
+  }
+
+  // await 之后房间可能已被其他流程改动（例如玩家离开导致对局中止）
+  isGameActive(room) {
+    return Boolean(room?.gameState) && room.status === 'playing'
   }
 
   getGameSnapshot(room, userId) {
@@ -329,7 +351,7 @@ class GameService {
   }
 
   async resolveRoundIfReady(room, responseUserId = null) {
-    if (!room?.gameState || !room.gameState.players.every((item) => item.hasSelected)) {
+    if (!this.isGameActive(room) || !room.gameState.players.every((item) => item.hasSelected)) {
       return null
     }
 
@@ -347,8 +369,14 @@ class GameService {
         loserIndexes: roundResult.loserIndexes || [],
       })
       await this.applyBotDecisions(room, 'round-advanced')
+      if (!this.isGameActive(room)) {
+        return null
+      }
       this.scheduleRoundTimer(room)
       await this.roomRepository.saveWithMode(room)
+      if (!this.isGameActive(room)) {
+        return null
+      }
       this.broadcaster.broadcastPerPlayer(room, 'roundResult', (targetPlayer) => ({
         roundResult,
         room: publicRoom,
@@ -388,6 +416,10 @@ class GameService {
       roundScores: playerItem.roundScores,
     }))
     room.finalRoundResult = roundResult
+    // 保留整局各轮结果，断线重连后结算面板仍能展示本局高光
+    room.finalRoundResults = Array.isArray(room.gameState.roundResults) ? [...room.gameState.roundResults] : []
+    // AI 默认已准备，界面上直接显示为 2/3、1/3 等
+    room.restartReadyIds = room.players.filter((player) => player.isBot === true).map((player) => player.id)
     room.gameState = null
     if (this.battleRecordService?.recordGameFinished) {
       try {
@@ -424,7 +456,11 @@ class GameService {
     return null
   }
 
-  async handleRoundTimeout(roomId) {
+  handleRoundTimeout(roomId) {
+    return this.runExclusive(roomId, () => this.handleRoundTimeoutLocked(roomId))
+  }
+
+  async handleRoundTimeoutLocked(roomId) {
     const room = this.roomRepository.get(roomId)
     if (!room?.gameState || room.status !== 'playing') {
       return
@@ -436,6 +472,9 @@ class GameService {
     }
 
     await this.applyBotDecisions(room, 'round-timeout')
+    if (!this.isGameActive(room)) {
+      return
+    }
     const autoSelectedCount = this.autoSelectMissingPlayers(room.gameState)
     if (autoSelectedCount === 0) {
       return
@@ -459,7 +498,11 @@ class GameService {
     await this.resolveRoundIfReady(room, null)
   }
 
-  async startGame(user, roomId) {
+  startGame(user, roomId) {
+    return this.runExclusive(roomId, () => this.startGameLocked(user, roomId))
+  }
+
+  async startGameLocked(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -476,34 +519,15 @@ class GameService {
     }
 
     this.ensureReadyPlayers(room)
-
-    this.clearRoundTimer(room.id)
-    room.gameState = createInitialGameState(room.players, {
-      selectionTimeoutMs: Number.isInteger(room.selectionTimeoutMs) && room.selectionTimeoutMs > 0
-        ? room.selectionTimeoutMs
-        : this.roundSelectionTimeoutMs,
-    })
-    this.setGameAction(room.gameState, 'deal', { phase: 'selecting', playerCount: room.players.length })
-    room.finalScores = null
-    room.finalRoundResult = null
-    room.finishedAt = null
-    room.status = 'playing'
-    await this.applyBotDecisions(room, 'game-start')
-    this.scheduleRoundTimer(room)
-    await this.roomRepository.saveWithMode(room)
-
-    const publicRoom = serializeRoom(room)
-    this.broadcaster.broadcast(room, 'roomUpdated', { room: publicRoom })
-    this.broadcaster.broadcastPerPlayer(room, 'gameStarted', (player) => ({
-      room: publicRoom,
-      gameState: getPublicGameState(room.gameState, player.id),
-    }))
-    this.lobbyBroadcaster.broadcastRoomList()
-
-    return getPublicGameState(room.gameState, user.id)
+    return this.beginNewGame(room, user.id, 'game-start')
   }
 
-  async restartGame(user, roomId) {
+  restartGame(user, roomId) {
+    return this.runExclusive(roomId, () => this.restartGameLocked(user, roomId))
+  }
+
+  // 再来一局：每位真人玩家点“准备”，AI 视为已准备；全员准备后自动开新局
+  async restartGameLocked(user, roomId) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -512,15 +536,32 @@ class GameService {
     if (!room) {
       throw new Error('房间不存在')
     }
-    if (room.hostId !== user.id) {
-      throw new Error('只有房主可以再来一局')
+    if (!room.players.some((player) => player.id === user.id)) {
+      throw new Error('不在该房间中')
     }
     if (room.status !== 'finished') {
       throw new Error('当前对局尚未结束')
     }
 
-    this.ensureReadyPlayers(room)
+    const readyIds = new Set(Array.isArray(room.restartReadyIds) ? room.restartReadyIds : [])
+    readyIds.add(user.id)
+    room.restartReadyIds = room.players
+      .filter((player) => readyIds.has(player.id) || player.isBot === true)
+      .map((player) => player.id)
 
+    const everyoneReady = room.players.length === gameConfig.maxPlayersPerRoom
+      && room.players.every((player) => room.restartReadyIds.includes(player.id))
+    if (!everyoneReady) {
+      await this.roomRepository.saveWithMode(room)
+      this.broadcaster.broadcast(room, 'roomUpdated', { room: serializeRoom(room) })
+      return null
+    }
+
+    this.ensureReadyPlayers(room)
+    return this.beginNewGame(room, user.id, 'game-restart')
+  }
+
+  async beginNewGame(room, responseUserId, source) {
     this.clearRoundTimer(room.id)
     room.gameState = createInitialGameState(room.players, {
       selectionTimeoutMs: Number.isInteger(room.selectionTimeoutMs) && room.selectionTimeoutMs > 0
@@ -530,9 +571,11 @@ class GameService {
     this.setGameAction(room.gameState, 'deal', { phase: 'selecting', playerCount: room.players.length })
     room.finalScores = null
     room.finalRoundResult = null
+    room.finalRoundResults = null
     room.finishedAt = null
+    room.restartReadyIds = []
     room.status = 'playing'
-    await this.applyBotDecisions(room, 'game-restart')
+    await this.applyBotDecisions(room, source)
     this.scheduleRoundTimer(room)
     await this.roomRepository.saveWithMode(room)
 
@@ -544,10 +587,14 @@ class GameService {
     }))
     this.lobbyBroadcaster.broadcastRoomList()
 
-    return getPublicGameState(room.gameState, user.id)
+    return getPublicGameState(room.gameState, responseUserId)
   }
 
-  async selectCards(user, roomId, round, selectedCards) {
+  selectCards(user, roomId, round, selectedCards) {
+    return this.runExclusive(roomId, () => this.selectCardsLocked(user, roomId, round, selectedCards))
+  }
+
+  async selectCardsLocked(user, roomId, round, selectedCards) {
     if (!user) {
       throw new Error('用户未登录')
     }
@@ -617,6 +664,9 @@ class GameService {
     player.hasSelected = true
     player.selectedByTimeout = false
     await this.applyBotDecisions(room, 'player-selection')
+    if (!this.isGameActive(room)) {
+      throw new Error('当前对局未进行中')
+    }
     const pendingCount = room.gameState.players.filter((item) => !item.hasSelected).length
     this.setGameAction(room.gameState, 'playerSelected', {
       phase: pendingCount === 0 ? 'revealing' : 'selecting',

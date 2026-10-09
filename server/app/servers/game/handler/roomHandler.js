@@ -113,6 +113,23 @@ class Handler {
   async cleanupUserFromRooms(userId) {
     await appContext.roomService.cleanupUserFromRooms(userId)
   }
+
+  /**
+   * 牌桌快捷表情
+   */
+  async sendEmote(msg, session, next) {
+    try {
+      const emote = appContext.emoteService.sendEmote(session.get('user'), {
+        roomId: msg?.roomId,
+        emoteId: msg?.emoteId,
+        targetId: msg?.targetId,
+      })
+      next(null, { code: 200, data: { emote } })
+    } catch (error) {
+      const code = error.message === '用户未登录' ? 401 : error.message === '发送太频繁了' ? 429 : 400
+      next(null, { code, error: error.message })
+    }
+  }
 }
 
 module.exports.rooms = appContext.roomRepository.rooms

@@ -142,4 +142,11 @@ export const gameService = {
       operationId: buildOperationId('select-cards', [roomId, round, normalizedSelectedCards.join('-')]),
     }).then(unwrapResponse)
   },
+  sendEmote(roomId, emoteId, targetId = null) {
+    return realtimeClient.request('game.roomHandler.sendEmote', {
+      roomId,
+      emoteId,
+      targetId: targetId || undefined,
+    }).then(unwrapResponse)
+  },
 }

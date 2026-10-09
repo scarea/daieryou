@@ -423,3 +423,136 @@ test('decideCardsForBot should hide round-4 public card from decision input', as
   assert.equal(Array.isArray(capturedInput.knownRemovedCards), true)
   assert.equal(capturedInput.knownRemovedCards.length > 0, true)
 })
+
+test('concurrent final selections should resolve rounds 4 and 5 exactly once', async () => {
+  const { service, roomRepository, perPlayerBroadcastCalls } = createServiceFixture()
+  const players = createPlayers()
+
+  roomRepository.save({
+    id: 'room-race',
+    hostId: players[0].id,
+    status: 'waiting',
+    players,
+    gameState: null,
+    finalScores: null,
+    createdAt: Date.now(),
+  })
+
+  await service.startGame(players[0], 'room-race')
+  for (let round = 1; round <= 3; round += 1) {
+    for (const player of players) {
+      await service.selectCards(player, 'room-race', round, [0, 1])
+    }
+  }
+
+  await service.selectCards(players[0], 'room-race', 4, [0, 1])
+  // 后两位玩家同时提交：未加锁时第二个请求会抢先结算第 5 轮并清空 gameState，第一个请求随后崩溃
+  const results = await Promise.allSettled([
+    service.selectCards(players[1], 'room-race', 4, [0, 1]),
+    service.selectCards(players[2], 'room-race', 4, [0, 1]),
+  ])
+
+  assert.deepEqual(results.map((result) => result.status), ['fulfilled', 'fulfilled'])
+  const room = roomRepository.get('room-race')
+  assert.equal(room.status, 'finished')
+  assert.equal(room.gameState, null)
+
+  const roundResultRounds = perPlayerBroadcastCalls
+    .filter((call) => call.event === 'roundResult' && call.userId === 'u1')
+    .map((call) => call.payload.roundResult.round)
+  assert.deepEqual(roundResultRounds, [1, 2, 3, 4, 5])
+  service.clearRoundTimer('room-race')
+})
+
+async function playFullGame(service, players, roomId) {
+  for (let round = 1; round <= 4; round += 1) {
+    for (const player of players) {
+      await service.selectCards(player, roomId, round, [0, 1])
+    }
+  }
+}
+
+test('restartGame should wait until every human player is ready', async () => {
+  const { service, roomRepository, broadcastCalls } = createServiceFixture()
+  const players = createPlayers()
+  roomRepository.save({
+    id: 'room-ready',
+    hostId: players[0].id,
+    status: 'waiting',
+    players,
+    gameState: null,
+    finalScores: null,
+    createdAt: Date.now(),
+  })
+
+  await service.startGame(players[0], 'room-ready')
+  await playFullGame(service, players, 'room-ready')
+  const finished = roomRepository.get('room-ready')
+  assert.equal(finished.status, 'finished')
+  assert.equal(finished.finalRoundResults.length, 5)
+  assert.deepEqual(finished.restartReadyIds, [])
+
+  // 非房主也可以先准备
+  assert.equal(await service.restartGame(players[1], 'room-ready'), null)
+  assert.deepEqual(roomRepository.get('room-ready').restartReadyIds, ['u2'])
+  assert.equal(await service.restartGame(players[0], 'room-ready'), null)
+  const readyBroadcast = broadcastCalls.filter((call) => call.event === 'roomUpdated').pop()
+  assert.deepEqual(readyBroadcast.payload.room.restartReadyIds, ['u1', 'u2'])
+
+  const gameState = await service.restartGame(players[2], 'room-ready')
+  assert.equal(gameState.currentRound, 1)
+  const restarted = roomRepository.get('room-ready')
+  assert.equal(restarted.status, 'playing')
+  assert.deepEqual(restarted.restartReadyIds, [])
+  assert.equal(restarted.finalRoundResults, null)
+  service.clearRoundTimer('room-ready')
+})
+
+test('restartGame should treat bots as ready', async () => {
+  const { service, roomRepository } = createServiceFixture()
+  const players = [
+    { id: 'u1', username: 'Host', score: 1000, online: true },
+    { id: 'bot-1', username: 'AI-1', score: 1000, online: true, isBot: true },
+    { id: 'bot-2', username: 'AI-2', score: 1000, online: true, isBot: true },
+  ]
+  roomRepository.save({
+    id: 'room-bots-ready',
+    hostId: 'u1',
+    status: 'finished',
+    players,
+    gameState: null,
+    finalScores: [],
+    createdAt: Date.now(),
+  })
+
+  const gameState = await service.restartGame(players[0], 'room-bots-ready')
+  assert.equal(gameState.currentRound, 1)
+  service.clearRoundTimer('room-bots-ready')
+})
+
+test('finished room should mark bots as ready for the next game', async () => {
+  const { service, roomRepository } = createServiceFixture()
+  const players = [
+    { id: 'u1', username: 'Host', score: 1000, online: true },
+    { id: 'bot-1', username: 'AI-1', score: 1000, online: true, isBot: true },
+    { id: 'bot-2', username: 'AI-2', score: 1000, online: true, isBot: true },
+  ]
+  roomRepository.save({
+    id: 'room-bot-finish',
+    hostId: 'u1',
+    status: 'waiting',
+    players,
+    gameState: null,
+    finalScores: null,
+    createdAt: Date.now(),
+  })
+
+  await service.startGame(players[0], 'room-bot-finish')
+  for (let round = 1; round <= 4; round += 1) {
+    await service.selectCards(players[0], 'room-bot-finish', round, [0, 1])
+  }
+
+  const room = roomRepository.get('room-bot-finish')
+  assert.equal(room.status, 'finished')
+  assert.deepEqual(room.restartReadyIds, ['bot-1', 'bot-2'])
+})

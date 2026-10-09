@@ -66,6 +66,7 @@
     "inviteCodeTtlMs": 604800000,
     "inviteCodeLength": 8,
     "memberDefaultDays": 30,
+    "memberSelfServicePurchaseEnabled": false,
     "adminEmails": "",
     "adminInviteListLimit": 50,
     "adminAuditListLimit": 50,

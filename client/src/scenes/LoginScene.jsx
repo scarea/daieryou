@@ -19,7 +19,7 @@ import {
 import useGameStore from '../store/gameStore'
 import GameRules from '../components/GameRules'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -203,13 +203,21 @@ const LoginScene = ({ onLoginSuccess }) => {
   }
 
   return (
-    <>
-      <Card className="scene-card login-scene-card" style={{ width: 'min(100%, 520px)' }}>
-        <header className="login-scene-header">
-          <Title level={2} className="scene-hero-title login-scene-title">
-            逮二游
-          </Title>
-          <p className="scene-hero-subtitle">专业账号体系：邮箱注册 + 验证码 + 密码登录</p>
+    <div className="hud-login">
+      <section className="hud-login-hero" aria-label="游戏介绍">
+        <span className="hud-kicker">THREE PLAYER · WILD JOKERS</span>
+        <h1 className="hud-login-title">逮二游</h1>
+        <p className="hud-login-tagline">三人牌桌，五轮比牌，谁排第二谁买单。</p>
+        <ul className="hud-login-points">
+          <li><strong>5</strong><span>轮对局</span></li>
+          <li><strong>2</strong><span>张大小王赖子</span></li>
+          <li><strong>1</strong><span>张暗牌公牌</span></li>
+        </ul>
+      </section>
+
+      <Card className="hud-panel hud-login-panel" variant="borderless">
+        <header className="hud-login-panel-head">
+          <span>入座</span>
           <Button
             type="link"
             icon={<QuestionCircleOutlined />}
@@ -251,7 +259,7 @@ const LoginScene = ({ onLoginSuccess }) => {
                     size="large"
                     block
                     loading={loading}
-                    className="scene-primary-btn scene-action-btn"
+                    className="hud-cta"
                     onClick={handlePasswordLogin}
                   >
                     邮箱密码登录
@@ -331,7 +339,7 @@ const LoginScene = ({ onLoginSuccess }) => {
                     size="large"
                     block
                     loading={loading}
-                    className="scene-accent-btn scene-action-btn"
+                    className="hud-cta"
                     onClick={handleRegister}
                   >
                     注册并登录
@@ -360,7 +368,7 @@ const LoginScene = ({ onLoginSuccess }) => {
                   size="large"
                   block
                   loading={loading}
-                  className="scene-primary-btn scene-action-btn"
+                  className="hud-cta"
                   data-testid="login-submit-button"
                   onClick={handleGuestLogin}
                 >
@@ -373,15 +381,15 @@ const LoginScene = ({ onLoginSuccess }) => {
       />
 
       <Divider style={{ margin: '16px 0 8px' }} />
-      <Text className="scene-form-helper">
+      <Text className="hud-form-helper">
         {emailEnabled
           ? '邮箱验证码默认通过邮件服务发送；未配置邮件服务时会在服务端日志输出开发验证码。'
           : '当前环境未开启邮箱登录，仅支持游客快速开始。'}
       </Text>
-    </Card>
+      </Card>
 
-    <GameRules visible={showRules} onClose={() => setShowRules(false)} />
-  </>
+      <GameRules visible={showRules} onClose={() => setShowRules(false)} />
+    </div>
   )
 }
 
