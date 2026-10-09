@@ -14,6 +14,7 @@ const { AccountAuthService } = require('./accountAuthService')
 const { BattleRecordService } = require('./battleRecordService')
 const { BattleRecordLifecycleService } = require('./battleRecordLifecycleService')
 const { BotDecisionService } = require('./bot/botDecisionService')
+const { EmoteService } = require('./emoteService')
 const { GameService } = require('./gameService')
 const { RoomLifecycleService } = require('./roomLifecycleService')
 const { loadRuntimeConfig } = require('../config/runtimeConfig')
@@ -88,6 +89,7 @@ const appContext = {
 }
 
 appContext.authService = new AuthService({
+  accountRepository,
   sessionRepository,
   roomService,
   roomRepository,
@@ -108,6 +110,7 @@ appContext.accountAuthService = new AccountAuthService({
   inviteCodeTtlMs: runtimeConfig.emailAuth.inviteCodeTtlMs,
   inviteCodeLength: runtimeConfig.emailAuth.inviteCodeLength,
   memberDefaultDays: runtimeConfig.emailAuth.memberDefaultDays,
+  memberSelfServicePurchaseEnabled: runtimeConfig.emailAuth.memberSelfServicePurchaseEnabled,
   adminEmails: runtimeConfig.emailAuth.adminEmails,
   adminInviteListLimit: runtimeConfig.emailAuth.adminInviteListLimit,
   adminAuditListLimit: runtimeConfig.emailAuth.adminAuditListLimit,
@@ -125,6 +128,11 @@ appContext.gameService = new GameService({
   botDecisionService,
   botDecisionTimeoutMs: runtimeConfig.bot.decisionTimeoutMs,
   roundSelectionTimeoutMs: runtimeConfig.game.roundSelectionTimeoutMs,
+})
+
+appContext.emoteService = new EmoteService({
+  roomRepository,
+  broadcaster,
 })
 
 module.exports = { appContext }

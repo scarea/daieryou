@@ -25,6 +25,7 @@ class AccountAuthService {
     inviteCodeTtlMs = 7 * 24 * 60 * 60 * 1000,
     inviteCodeLength = 8,
     memberDefaultDays = DEFAULT_MEMBER_DAYS,
+    memberSelfServicePurchaseEnabled = false,
     adminEmails = [],
     adminInviteListLimit = 50,
     adminAuditListLimit = 50,
@@ -49,6 +50,7 @@ class AccountAuthService {
       Math.min(MAX_INVITE_CODE_LENGTH, Math.floor(Number(inviteCodeLength) || 8)),
     )
     this.memberDefaultDays = this.normalizeMembershipDays(memberDefaultDays, DEFAULT_MEMBER_DAYS)
+    this.memberSelfServicePurchaseEnabled = memberSelfServicePurchaseEnabled === true
     this.adminEmails = new Set(
       Array.isArray(adminEmails)
         ? adminEmails
@@ -228,6 +230,7 @@ class AccountAuthService {
       inviteRequired: this.inviteRequired,
       inviteCodeLength: this.inviteCodeLength,
       memberDefaultDays: this.memberDefaultDays,
+      memberSelfServicePurchaseEnabled: this.memberSelfServicePurchaseEnabled,
       adminInviteListLimit: this.adminInviteListLimit,
       adminAuditListLimit: this.adminAuditListLimit,
       currentAccount: null,
@@ -318,6 +321,9 @@ class AccountAuthService {
     this.assertEmailEnabled()
     if (!currentUser?.id) {
       throw new Error('用户未登录')
+    }
+    if (!this.memberSelfServicePurchaseEnabled) {
+      throw new Error('会员自助开通暂未开放，请联系管理员')
     }
 
     const account = await this.accountRepository.findByUserId(currentUser.id)

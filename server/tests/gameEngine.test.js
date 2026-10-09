@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { createInitialGameState, calculateRound, prepareNextRound } = require('../src/domain/gameEngine')
+const { createInitialGameState, calculateRound, prepareNextRound, getPublicGameState } = require('../src/domain/gameEngine')
 
 function createManualRoundState(playerHands, publicCard) {
   return {
@@ -382,4 +382,23 @@ test('calculateRound should handle two second-place ties (multiple losers)', () 
   assert.equal(gameState.players[roundResult.playerResults[0].playerIndex].roundScores[0], roundResult.score * 2)
   assert.equal(gameState.players[roundResult.playerResults[1].playerIndex].roundScores[0], -roundResult.score)
   assert.equal(gameState.players[roundResult.playerResults[2].playerIndex].roundScores[0], -roundResult.score)
+})
+
+test('getPublicGameState should only expose selected card indexes to their owner', () => {
+  const players = [
+    { id: 'u1', username: 'A' },
+    { id: 'u2', username: 'B' },
+    { id: 'u3', username: 'C' },
+  ]
+  const gameState = createInitialGameState(players)
+  gameState.players[1].selectedCards = [0, 3]
+  gameState.players[1].hasSelected = true
+
+  const viewForU1 = getPublicGameState(gameState, 'u1')
+  assert.deepEqual(viewForU1.players[1].selectedCards, [])
+  assert.equal(viewForU1.players[1].hasSelected, true)
+  assert.equal(viewForU1.players[1].handCards, 5)
+
+  const viewForU2 = getPublicGameState(gameState, 'u2')
+  assert.deepEqual(viewForU2.players[1].selectedCards, [0, 3])
 })

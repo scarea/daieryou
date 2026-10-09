@@ -15,6 +15,7 @@ class AuthService {
     roomService,
     roomRepository,
     lobbyBroadcaster,
+    accountRepository = null,
     disconnectGraceMs = 15000,
     maxUserProfiles = DEFAULT_MAX_USER_PROFILES,
     sessionTokenSecret = DEFAULT_SESSION_TOKEN_SECRET,
@@ -24,6 +25,7 @@ class AuthService {
     this.roomService = roomService
     this.roomRepository = roomRepository
     this.lobbyBroadcaster = lobbyBroadcaster
+    this.accountRepository = accountRepository
     this.disconnectGraceMs = disconnectGraceMs
     this.maxUserProfiles = Number.isInteger(maxUserProfiles) && maxUserProfiles > 0
       ? maxUserProfiles
@@ -168,6 +170,33 @@ class AuthService {
     return userId
   }
 
+  // 带会话凭证恢复登录时，昵称以已有身份为准（房间内的名字 > 账号昵称），
+  // 防止对局中改名冒充同桌玩家；只有全新身份才使用请求里的昵称
+  async resolveDisplayName(userId, requestedUsername, resumed) {
+    if (!resumed) {
+      return requestedUsername
+    }
+
+    const room = this.roomRepository.findByUserId(userId)
+    const roomPlayer = room?.players.find((player) => player.id === userId)
+    if (roomPlayer?.username) {
+      return roomPlayer.username
+    }
+
+    if (this.accountRepository?.findByUserId) {
+      try {
+        const account = await this.accountRepository.findByUserId(userId)
+        if (account?.username) {
+          return account.username
+        }
+      } catch (error) {
+        // 账号库不可用时退回请求里的昵称
+      }
+    }
+
+    return requestedUsername
+  }
+
   async login(username, session, sessionToken) {
     if (!username || !username.trim()) {
       throw new Error('用户名不能为空')
@@ -176,8 +205,9 @@ class AuthService {
       throw new Error(`用户名不能超过${MAX_USERNAME_LENGTH}个字符`)
     }
 
-    const normalizedUsername = username.trim()
+    const resumed = typeof sessionToken === 'string' && sessionToken.trim().length > 0
     const userId = this.resolveUserIdFromSession(sessionToken)
+    const normalizedUsername = await this.resolveDisplayName(userId, username.trim(), resumed)
 
     this.clearDisconnectTimer(userId)
 
@@ -196,6 +226,7 @@ class AuthService {
       gameState: room?.gameState ? getPublicGameState(room.gameState, user.id) : null,
       finalScores: room?.finalScores || null,
       finalRoundResult: room?.finalRoundResult || null,
+      finalRoundResults: room?.finalRoundResults || null,
       rooms: this.lobbyBroadcaster.buildRoomList(),
       resumed: Boolean(room),
       sessionToken: nextSessionToken,

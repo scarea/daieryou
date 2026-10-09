@@ -48,6 +48,21 @@ function parseStringList(value, fallbackValue = []) {
   return entries.length > 0 ? entries : fallbackValue
 }
 
+const DEFAULT_SESSION_TOKEN_SECRET = 'daieryou-dev-session-secret'
+const MIN_PRODUCTION_SECRET_LENGTH = 32
+
+// 生产环境必须显式配置足够长的会话密钥：用默认值的话任何人都能伪造 sessionToken 冒充其他玩家
+function assertSessionTokenSecret(secret, env) {
+  if (env.NODE_ENV !== 'production') {
+    return
+  }
+  if (secret === DEFAULT_SESSION_TOKEN_SECRET || secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+    throw new Error(
+      `生产环境必须通过 DAIERYOU_SESSION_TOKEN_SECRET 配置至少 ${MIN_PRODUCTION_SECRET_LENGTH} 位的随机会话密钥`,
+    )
+  }
+}
+
 function loadRuntimeConfig(env = process.env) {
   const network = runtimeConfig.network || {}
   const database = runtimeConfig.database || {}
@@ -60,6 +75,12 @@ function loadRuntimeConfig(env = process.env) {
   const roomRepository = runtimeConfig.roomRepository || {}
   const roomMirror = runtimeConfig.roomMirror || {}
   const emailAuth = runtimeConfig.emailAuth || {}
+
+  const sessionTokenSecret = parseNonEmptyString(
+    env.DAIERYOU_SESSION_TOKEN_SECRET,
+    session.sessionTokenSecret || DEFAULT_SESSION_TOKEN_SECRET,
+  )
+  assertSessionTokenSecret(sessionTokenSecret, env)
 
   return {
     wsPort: parsePositiveNumber(env.DAIERYOU_WS_PORT, network.wsPort || 3014),
@@ -93,10 +114,7 @@ function loadRuntimeConfig(env = process.env) {
       env.DAIERYOU_MAX_USER_PROFILES,
       session.maxUserProfiles || 5000,
     ),
-    sessionTokenSecret: parseNonEmptyString(
-      env.DAIERYOU_SESSION_TOKEN_SECRET,
-      session.sessionTokenSecret || 'daieryou-dev-session-secret',
-    ),
+    sessionTokenSecret,
     sessionTokenTtlMs: parsePositiveNumber(
       env.DAIERYOU_SESSION_TOKEN_TTL_MS,
       session.sessionTokenTtlMs || 30 * 24 * 60 * 60 * 1000,
@@ -248,6 +266,11 @@ function loadRuntimeConfig(env = process.env) {
       memberDefaultDays: parsePositiveNumber(
         env.DAIERYOU_AUTH_MEMBER_DEFAULT_DAYS,
         emailAuth.memberDefaultDays || 30,
+      ),
+      // 目前没有接入支付，自助开通默认关闭，否则任何账号都能无限免费续会员
+      memberSelfServicePurchaseEnabled: parseBoolean(
+        env.DAIERYOU_AUTH_MEMBER_SELF_SERVICE_PURCHASE,
+        emailAuth.memberSelfServicePurchaseEnabled ?? false,
       ),
       adminEmails: parseStringList(
         env.DAIERYOU_AUTH_ADMIN_EMAILS,

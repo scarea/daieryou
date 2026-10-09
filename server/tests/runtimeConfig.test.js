@@ -12,7 +12,7 @@ test('loadRuntimeConfig should include battleRecordLifecycle defaults', () => {
   assert.equal(config.battleRecordLifecycle.cleanupBatchSize, 500)
   assert.equal(config.battleRecordLifecycle.maxBatchesPerSweep, 3)
   assert.equal(config.battleRecordLifecycle.archiveBeforeCleanup, true)
-  assert.equal(config.bot.enabled, false)
+  assert.equal(config.bot.enabled, true)
   assert.equal(config.bot.provider, 'rule')
   assert.equal(config.bot.maxPerRoom, 2)
   assert.equal(config.bot.decisionTimeoutMs, 120)
@@ -63,4 +63,26 @@ test('loadRuntimeConfig should parse battleRecordLifecycle env overrides', () =>
   assert.equal(config.bot.llm.modelName, 'gpt-test')
   assert.equal(config.bot.llm.systemPrompt, 'custom prompt')
   assert.equal(config.game.roundSelectionTimeoutMs, 90000)
+})
+
+test('loadRuntimeConfig should refuse default or weak session secret in production', () => {
+  assert.throws(() => loadRuntimeConfig({ NODE_ENV: 'production' }), /DAIERYOU_SESSION_TOKEN_SECRET/)
+  assert.throws(
+    () => loadRuntimeConfig({ NODE_ENV: 'production', DAIERYOU_SESSION_TOKEN_SECRET: 'too-short' }),
+    /DAIERYOU_SESSION_TOKEN_SECRET/,
+  )
+
+  const strongSecret = 'a'.repeat(64)
+  const config = loadRuntimeConfig({ NODE_ENV: 'production', DAIERYOU_SESSION_TOKEN_SECRET: strongSecret })
+  assert.equal(config.sessionTokenSecret, strongSecret)
+})
+
+test('loadRuntimeConfig should keep dev secret outside production and disable self-service membership by default', () => {
+  const config = loadRuntimeConfig({})
+  assert.equal(config.sessionTokenSecret, 'daieryou-dev-session-secret')
+  assert.equal(config.emailAuth.memberSelfServicePurchaseEnabled, false)
+  assert.equal(
+    loadRuntimeConfig({ DAIERYOU_AUTH_MEMBER_SELF_SERVICE_PURCHASE: 'true' }).emailAuth.memberSelfServicePurchaseEnabled,
+    true,
+  )
 })

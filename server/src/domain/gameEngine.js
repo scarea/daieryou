@@ -562,11 +562,16 @@ function getPublicGameState(gameState, currentPlayerId = null) {
   return {
     ...gameState,
     publicCards: visiblePublicCards,
-    players: gameState.players.map((player) => ({
-      ...player,
-      handCards: player.id === currentPlayerId ? player.handCards : player.handCards.length,
-      playedCards: player.id === currentPlayerId ? player.playedCards : player.playedCards.length,
-    })),
+    players: gameState.players.map((player) => {
+      const isSelf = player.id === currentPlayerId
+      return {
+        ...player,
+        handCards: isSelf ? player.handCards : player.handCards.length,
+        playedCards: isSelf ? player.playedCards : player.playedCards.length,
+        // 选牌下标只给本人；其他人只需要知道是否已出牌
+        selectedCards: isSelf ? player.selectedCards : [],
+      }
+    }),
     deck: gameState.deck.length,
     hiddenPublicCardIndex: hiddenPublicCardIndex >= 0 ? hiddenPublicCardIndex : null,
     selectionRequired: isSelectionRequiredRound(gameState.currentRound, gameState.maxRounds),

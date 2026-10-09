@@ -23,6 +23,7 @@ function serializeRoom(room) {
       ? room.selectionTimeoutMs
       : undefined,
     players: room.players.map(serializePlayer),
+    restartReadyIds: Array.isArray(room.restartReadyIds) ? room.restartReadyIds : [],
   }
 }
 

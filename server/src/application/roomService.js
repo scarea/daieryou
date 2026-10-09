@@ -367,6 +367,9 @@ class RoomService {
 
     const wasPlaying = room.status === 'playing'
     room.players = room.players.filter((player) => player.id !== userId)
+    if (Array.isArray(room.restartReadyIds)) {
+      room.restartReadyIds = room.restartReadyIds.filter((id) => id !== userId)
+    }
 
     if (room.gameState?.players) {
       room.gameState.players = room.gameState.players.filter((player) => player.id !== userId)

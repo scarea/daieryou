@@ -28,6 +28,7 @@ const ROUTE_BODY_ALLOWLIST = new Map([
   ['game.roomHandler.removeBot', new Set(['roomId', 'botPlayerId', 'operationId'])],
   ['game.roomHandler.leaveRoom', new Set(['roomId', 'operationId'])],
   ['game.roomHandler.getRoomList', new Set()],
+  ['game.roomHandler.sendEmote', new Set(['roomId', 'emoteId', 'targetId'])],
   ['game.gameHandler.startGame', new Set(['roomId', 'operationId'])],
   ['game.gameHandler.selectCards', new Set(['roomId', 'round', 'selectedCards', 'operationId'])],
   ['game.gameHandler.restartGame', new Set(['roomId', 'operationId'])],
@@ -400,7 +401,13 @@ function buildGatewayMetricsSnapshot() {
 function validateRouteBodyAllowlist(route, body) {
   const allowlist = ROUTE_BODY_ALLOWLIST.get(route)
   if (!allowlist) {
-    return { valid: true }
+    // 只开放白名单里的路由，避免通过路由名调用到处理器原型上的 constructor/toString 等方法
+    return {
+      valid: false,
+      code: 404,
+      reason: 'route_not_allowed',
+      error: `路由不存在: ${route}`,
+    }
   }
 
   const keys = Object.keys(body)
@@ -519,7 +526,7 @@ function validateIncomingMessage(msg) {
     return {
       valid: false,
       id,
-      code: 400,
+      code: allowlistValidation.code || 400,
       reason: allowlistValidation.reason || 'body_allowlist_rejected',
       error: allowlistValidation.error || '请求字段不合法',
     }
