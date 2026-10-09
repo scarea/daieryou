@@ -9,7 +9,7 @@ import Avatar3D from './Avatar3D'
 import { ChipStack, CHIP_COLORS } from './CasinoRoom'
 import { getCardName, getHandTypeName } from '../utils/cardUtils'
 import soundEngine from '../audio/soundEngine'
-import useSettingsStore, { QUALITY_PRESETS, tapFeedback } from '../settings/settingsStore'
+import useSettingsStore, { QUALITY_PRESETS, effectiveQuality, tapFeedback } from '../settings/settingsStore'
 import ShowdownEffects, { useTimelineFlag } from './ShowdownEffects'
 import { EMOTES } from '../components/emotes'
 import {
@@ -313,7 +313,7 @@ const GameTable3D = () => {
   const showdown = useTableUiStore((state) => state.showdown)
   const urgent = useTableUiStore((state) => state.urgent)
   const emotes = useTableUiStore((state) => state.emotes)
-  const quality = useSettingsStore((state) => state.quality)
+  const quality = useSettingsStore((state) => effectiveQuality(state.quality, state.qualityCap))
   const reducedMotion = useSettingsStore((state) => state.reducedMotion)
   const moodReached = useTimelineFlag(showdown, showdown?.timeline?.stampAt ?? showdown?.timeline?.outcomeAt)
   const showdownEnded = useTimelineFlag(showdown, showdown?.timeline?.endAt)
