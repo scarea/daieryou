@@ -1,3 +1,4 @@
+const http = require('node:http')
 const WebSocket = require('ws')
 const mongoose = require('mongoose')
 const { v4: uuidv4 } = require('uuid')
@@ -61,7 +62,20 @@ function logGatewayEvent(level, event, payload = {}) {
   console.log(message)
 }
 
+let databaseHeartbeatTimer = null
+
 async function connectDatabase() {
+  if (appContext.pgDatabase) {
+    try {
+      await appContext.pgDatabase.connect({ migrate: appContext.runtimeConfig.databaseAutoMigrate })
+      console.log('Postgres 连接成功（表结构已同步）')
+      startDatabaseHeartbeat()
+    } catch (error) {
+      console.log('Postgres 连接失败，邮箱账号与战绩功能不可用（游客模式仍可用）:', error.message)
+    }
+    return
+  }
+
   if (appContext.runtimeConfig.skipMongo) {
     console.log('跳过 MongoDB 连接（DAIERYOU_SKIP_MONGO=true）')
     return
@@ -72,6 +86,19 @@ async function connectDatabase() {
     console.log('MongoDB 连接成功')
   } catch (error) {
     console.log('MongoDB 连接失败，邮箱账号功能不可用（游客模式仍可用）:', error.message)
+  }
+}
+
+// 定期写一次数据库心跳：免费托管的数据库（如 Supabase）长时间无访问会被暂停
+function startDatabaseHeartbeat() {
+  const beat = () => {
+    appContext.pgDatabase.heartbeat('game-server', { pid: process.pid })
+      .catch((error) => console.error('数据库心跳失败:', error.message))
+  }
+  beat()
+  databaseHeartbeatTimer = setInterval(beat, appContext.runtimeConfig.databaseHeartbeatIntervalMs)
+  if (typeof databaseHeartbeatTimer.unref === 'function') {
+    databaseHeartbeatTimer.unref()
   }
 }
 
@@ -198,12 +225,43 @@ const entryHandler = require('./app/servers/connector/handler/entryHandler')()
 const roomHandler = require('./app/servers/game/handler/roomHandler')()
 const gameHandler = require('./app/servers/game/handler/gameHandler')()
 
+const startedAt = Date.now()
+
+// HTTP 服务：/healthz 供平台健康检查与外部定时保活访问；其他路径一律 404。
+// WebSocket 挂在同一个端口上（托管平台通常只开放一个端口）。
+const httpServer = http.createServer((req, res) => {
+  const pathname = (req.url || '').split('?')[0]
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (pathname === '/healthz' || pathname === '/') {
+      const body = JSON.stringify({
+        ok: true,
+        uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+        database: appContext.pgDatabase
+          ? (appContext.pgDatabase.isReady() ? 'postgres' : 'postgres-unavailable')
+          : (mongoose.connection.readyState === 1 ? 'mongodb' : 'none'),
+      })
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        // 前端（另一个域名）启动时会先访问它来唤醒休眠的免费服务器
+        'access-control-allow-origin': '*',
+      })
+      res.end(req.method === 'HEAD' ? undefined : body)
+      return
+    }
+  }
+  res.writeHead(404, { 'content-type': 'text/plain' })
+  res.end('not found')
+})
+
 const wss = new WebSocket.Server({
-  port: appContext.runtimeConfig.wsPort,
+  server: httpServer,
   maxPayload: appContext.runtimeConfig.maxWsPayloadBytes,
 })
 
-console.log('WebSocket 服务器启动成功，端口:', appContext.runtimeConfig.wsPort)
+httpServer.listen(appContext.runtimeConfig.wsPort, () => {
+  console.log('WebSocket 服务器启动成功，端口:', appContext.runtimeConfig.wsPort)
+})
 
 const requestDedupCache = new Map()
 
@@ -787,11 +845,18 @@ startRoomMirrorRetryTask()
 appContext.roomLifecycleService.start()
 appContext.battleRecordLifecycleService.start()
 
-process.on('SIGINT', async () => {
+async function shutdown() {
   console.log('服务器正在关闭...')
   console.log('[gateway-metrics] snapshot:', JSON.stringify(buildGatewayMetricsSnapshot()))
   appContext.roomLifecycleService.stop()
   appContext.battleRecordLifecycleService.stop()
+  if (databaseHeartbeatTimer) {
+    clearInterval(databaseHeartbeatTimer)
+    databaseHeartbeatTimer = null
+  }
+  if (appContext.pgDatabase) {
+    appContext.pgDatabase.close().catch(() => {})
+  }
   if (roomMirrorSyncTimer) {
     clearInterval(roomMirrorSyncTimer)
     roomMirrorSyncTimer = null
@@ -807,7 +872,7 @@ process.on('SIGINT', async () => {
   }
 
   wss.close(() => {
-    process.exit(0)
+    httpServer.close(() => process.exit(0))
   })
 
   const forceExitTimer = setTimeout(() => {
@@ -816,7 +881,10 @@ process.on('SIGINT', async () => {
   if (typeof forceExitTimer.unref === 'function') {
     forceExitTimer.unref()
   }
-})
+}
+
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception: ', err.stack)

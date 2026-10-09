@@ -5,6 +5,13 @@ const { AccountRepository } = require('../infrastructure/accountRepository')
 const { InviteCodeRepository } = require('../infrastructure/inviteCodeRepository')
 const { AdminAuditRepository } = require('../infrastructure/adminAuditRepository')
 const { BattleRecordRepository } = require('../infrastructure/battleRecordRepository')
+const { PgDatabase } = require('../infrastructure/postgres/pgDatabase')
+const {
+  PgAccountRepository,
+  PgInviteCodeRepository,
+  PgAdminAuditRepository,
+  PgBattleRecordRepository,
+} = require('../infrastructure/postgres/pgRepositories')
 const { EmailSender } = require('../infrastructure/emailSender')
 const { RoomBroadcaster } = require('../infrastructure/roomBroadcaster')
 const { LobbyBroadcaster } = require('../infrastructure/lobbyBroadcaster')
@@ -22,10 +29,14 @@ const { loadRuntimeConfig } = require('../config/runtimeConfig')
 const runtimeConfig = loadRuntimeConfig()
 
 const sessionRepository = new SessionRepository()
-const accountRepository = new AccountRepository()
-const inviteCodeRepository = new InviteCodeRepository()
-const adminAuditRepository = new AdminAuditRepository()
-const battleRecordRepository = new BattleRecordRepository()
+// 存储选择：配置了 DAIERYOU_DATABASE_URL 用 Postgres（Supabase），否则用 MongoDB
+const pgDatabase = runtimeConfig.databaseUrl
+  ? new PgDatabase({ connectionString: runtimeConfig.databaseUrl, ssl: runtimeConfig.databaseSsl })
+  : null
+const accountRepository = pgDatabase ? new PgAccountRepository({ database: pgDatabase }) : new AccountRepository()
+const inviteCodeRepository = pgDatabase ? new PgInviteCodeRepository({ database: pgDatabase }) : new InviteCodeRepository()
+const adminAuditRepository = pgDatabase ? new PgAdminAuditRepository({ database: pgDatabase }) : new AdminAuditRepository()
+const battleRecordRepository = pgDatabase ? new PgBattleRecordRepository({ database: pgDatabase }) : new BattleRecordRepository()
 const roomMirror = new RedisRoomMirror({
   ...runtimeConfig.roomMirror,
 })
@@ -67,6 +78,7 @@ const roomLifecycleService = new RoomLifecycleService({
 })
 
 const appContext = {
+  pgDatabase,
   sessionRepository,
   accountRepository,
   inviteCodeRepository,

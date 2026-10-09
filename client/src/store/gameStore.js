@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { env } from '../config/env'
 import { gameService } from '../services/gameService'
 import { realtimeClient } from '../services/realtimeClient'
+import { wakeServer, withRetries } from '../services/serverWakeup'
 
 const STORAGE_KEY = 'daieryou_user'
 const RECONNECT_DELAY_MS = 1500
@@ -359,6 +360,9 @@ function bindRealtimeEvents(set, get) {
 
 const useGameStore = create((set, get) => ({
   bootstrapStatus: 'idle',
+  // 免费服务器休眠后首次访问需要唤醒：'waking' 时界面显示提示
+  serverWakeStatus: null,
+  serverWakeStartedAt: null,
   user: null,
   isLoggedIn: false,
   isConnected: false,
@@ -422,7 +426,12 @@ const useGameStore = create((set, get) => ({
     set({ bootstrapStatus: 'loading' })
 
     try {
-      await connect()
+      const awake = await wakeServer({
+        onWaiting: () => set({ serverWakeStatus: 'waking', serverWakeStartedAt: Date.now() }),
+      })
+      set({ serverWakeStatus: awake ? null : 'failed' })
+      await withRetries(() => connect())
+      set({ serverWakeStatus: null })
       await fetchAuthConfig()
 
       const savedUser = readStoredUser()
@@ -433,7 +442,9 @@ const useGameStore = create((set, get) => ({
 
       set({ bootstrapStatus: 'ready' })
     } catch (error) {
-      persistUser(null)
+      if (error?.message === '会话已失效，请重新登录') {
+        persistUser(null)
+      }
       clearReconnectTimer()
       set({
         user: null,
