@@ -39,9 +39,16 @@ npx wrangler secret put DAIERYOU_DATABASE_URL   # 粘贴 Supabase 连接串
 用 `E2E_EXTERNAL_WS_URL=ws://127.0.0.1:8787 npx playwright test e2e/full-game.spec.js` 可在 Cloudflare 运行时上跑完整对局测试。
 
 ### 3. Vercel（前端）
-1. **Add New → Project**，导入本仓库，**Root Directory** 选 `client`。
-2. 环境变量 `VITE_WS_URL` = `wss://daieryou.<子域名>.workers.dev`。
-3. 部署。之后推送 `main` 会自动重新部署前端；服务端更新需在 `server/` 下重新执行 `npx wrangler deploy`。
+前端是独立的 Vite 项目（`client/`），可用 CLI 直接部署，无需连接 GitHub：
+```bash
+cd client
+npx vercel login
+npx vercel link --yes --project daieryou
+printf 'wss://daieryou.<子域名>.workers.dev' | npx vercel env add VITE_WS_URL production
+npx vercel deploy --prod
+```
+也可以在 Vercel 控制台导入仓库（Root Directory 选 `client`），之后推送 `main` 自动部署。
+服务端更新需在 `server/` 下重新执行 `npx wrangler deploy`。
 
 ### 4. 保活（可选）
 Durable Object 不会像 Render 那样休眠，无需保活。若担心 Supabase 7 天无访问被暂停（长时间没人玩时），可在 Supabase SQL Editor 执行 `supabase/keepalive.sql`（把地址换成 `https://daieryou.<子域名>.workers.dev/healthz`），每 10 分钟访问一次，顺带写数据库心跳。

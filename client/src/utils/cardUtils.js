@@ -1,5 +1,5 @@
 // 牌型判断（含大小王赖子）只在服务端进行，前端只负责展示
-import { SUITS, RANKS, HAND_TYPES, getCardName } from '../../../shared/game-rules/cards.js'
+import { SUITS, RANKS, HAND_TYPES, getCardName } from './cards.js'
 
 export { SUITS, RANKS, HAND_TYPES, getCardName }
 
