@@ -1,9 +1,11 @@
 // 与 MongoDB 版本接口完全一致的 Postgres 存储实现（账号、邀请码、审计日志、战绩）。
 // 校验/归一化逻辑复用原仓库类，只替换数据读写部分，保证两种存储行为一致。
-const { AccountRepository } = require('../accountRepository')
-const { InviteCodeRepository } = require('../inviteCodeRepository')
-const { AdminAuditRepository } = require('../adminAuditRepository')
-const { BattleRecordRepository } = require('../battleRecordRepository')
+const {
+  AccountRepositoryBase,
+  InviteCodeRepositoryBase,
+  AdminAuditRepositoryBase,
+  BattleRecordRepositoryBase,
+} = require('../repositoryBase')
 
 const UNIQUE_VIOLATION = '23505'
 
@@ -51,7 +53,7 @@ function mapAccountRow(row) {
   return account
 }
 
-class PgAccountRepository extends AccountRepository {
+class PgAccountRepository extends AccountRepositoryBase {
   constructor({ database }) {
     super()
     this.database = database
@@ -162,7 +164,7 @@ function mapInviteCodeRow(row) {
   }
 }
 
-class PgInviteCodeRepository extends InviteCodeRepository {
+class PgInviteCodeRepository extends InviteCodeRepositoryBase {
   constructor({ database }) {
     super()
     this.database = database
@@ -339,7 +341,7 @@ function mapAuditRow(row) {
   }
 }
 
-class PgAdminAuditRepository extends AdminAuditRepository {
+class PgAdminAuditRepository extends AdminAuditRepositoryBase {
   constructor({ database }) {
     super()
     this.database = database
@@ -423,7 +425,7 @@ function mapBattleRow(row) {
   }
 }
 
-class PgBattleRecordRepository extends BattleRecordRepository {
+class PgBattleRecordRepository extends BattleRecordRepositoryBase {
   constructor({ database }) {
     super()
     this.database = database

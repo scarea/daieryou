@@ -122,3 +122,12 @@ test('ZhaJinHuaStrategyEngine should exclude known removed cards from unknown po
   assert.equal(poolKeys.has('diamonds:7'), false)
   assert.equal(poolKeys.has('spades:1'), false)
 })
+
+test('strategy engine should respect a total simulation cap', () => {
+  const { ZhaJinHuaStrategyEngine } = require('../src/application/bot/engines/zhaJinHuaStrategyEngine')
+  const capped = new ZhaJinHuaStrategyEngine({ maxTotalSimulations: 100 })
+  const uncapped = new ZhaJinHuaStrategyEngine()
+  assert.equal(capped.getSimulationCount(10, 'hard'), 10)
+  assert.equal(capped.getSimulationCount(100, 'hard'), 4)
+  assert.ok(uncapped.getSimulationCount(10, 'hard') > 100)
+})

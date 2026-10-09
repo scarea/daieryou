@@ -1,0 +1,32 @@
+# Cloudflare Workers + Durable Objects 部署配置（免费版可用）
+# 部署：cd server && npx wrangler deploy
+# 密钥：npx wrangler secret put DAIERYOU_SESSION_TOKEN_SECRET / DAIERYOU_DATABASE_URL
+name = "daieryou"
+main = "cloudflare/worker.mjs"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "GAME"
+class_name = "GameServer"
+
+# 免费版只支持 SQLite 后端的 Durable Object
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameServer"]
+
+# Supabase 连接走 Hyperdrive（verify-ca，校验 Supabase 私有根证书 supabase/supabase-root-2021-ca.pem）
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "ee552c814e5541038f52d0e600df41a9"
+
+[vars]
+NODE_ENV = "production"
+DAIERYOU_SKIP_MONGO = "1"
+# 免费版每次请求 CPU 上限 10ms：限制 AI 模拟次数、降低密码哈希迭代次数（迭代次数随哈希存储，可随时调整）
+DAIERYOU_BOT_MAX_SIMULATIONS = "80"
+DAIERYOU_PASSWORD_HASH_ITERATIONS = "20000"
+
+[observability]
+enabled = true

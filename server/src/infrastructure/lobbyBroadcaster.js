@@ -1,4 +1,5 @@
-const WebSocket = require('ws')
+// SOCKET_OPEN；不直接依赖 ws 库，Node 与 Cloudflare 的 WebSocket 都适用
+const SOCKET_OPEN = 1
 const { serializeRoomList } = require('../domain/roomView')
 
 class LobbyBroadcaster {
@@ -12,7 +13,7 @@ class LobbyBroadcaster {
   }
 
   sendRoomList(session) {
-    if (!session || session.ws.readyState !== WebSocket.OPEN) {
+    if (!session || session.ws.readyState !== SOCKET_OPEN) {
       return
     }
 
@@ -25,7 +26,7 @@ class LobbyBroadcaster {
   broadcastRoomList() {
     const rooms = this.buildRoomList()
     this.sessionRepository.forEachBoundUser((session) => {
-      if (!session || session.ws.readyState !== WebSocket.OPEN) {
+      if (!session || session.ws.readyState !== SOCKET_OPEN) {
         return
       }
 

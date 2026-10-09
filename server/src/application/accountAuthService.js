@@ -1,6 +1,9 @@
 const crypto = require('node:crypto')
 const { v4: uuidv4 } = require('uuid')
 
+const LEGACY_PASSWORD_HASH_ITERATIONS = 120000
+const PASSWORD_HASH_PREFIX = 'pbkdf2_sha256'
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD_LENGTH = 8
 const MAX_PASSWORD_LENGTH = 72
@@ -26,6 +29,7 @@ class AccountAuthService {
     inviteCodeLength = 8,
     memberDefaultDays = DEFAULT_MEMBER_DAYS,
     memberSelfServicePurchaseEnabled = false,
+    passwordHashIterations = LEGACY_PASSWORD_HASH_ITERATIONS,
     adminEmails = [],
     adminInviteListLimit = 50,
     adminAuditListLimit = 50,
@@ -51,6 +55,9 @@ class AccountAuthService {
     )
     this.memberDefaultDays = this.normalizeMembershipDays(memberDefaultDays, DEFAULT_MEMBER_DAYS)
     this.memberSelfServicePurchaseEnabled = memberSelfServicePurchaseEnabled === true
+    this.passwordHashIterations = Number.isInteger(passwordHashIterations) && passwordHashIterations >= 10000
+      ? passwordHashIterations
+      : LEGACY_PASSWORD_HASH_ITERATIONS
     this.adminEmails = new Set(
       Array.isArray(adminEmails)
         ? adminEmails
@@ -600,20 +607,34 @@ class AccountAuthService {
       .digest('hex')
   }
 
+  // 新格式：pbkdf2_sha256$<迭代次数>$<hex>；旧数据为纯 hex，迭代次数固定为 120000
   hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-    const hash = crypto
-      .pbkdf2Sync(password, salt, 120000, 32, 'sha256')
+    const iterations = this.passwordHashIterations
+    const digest = crypto
+      .pbkdf2Sync(password, salt, iterations, 32, 'sha256')
       .toString('hex')
 
-    return { salt, hash }
+    return { salt, hash: `${PASSWORD_HASH_PREFIX}$${iterations}$${digest}` }
   }
 
   verifyPassword(password, passwordSalt, passwordHash) {
+    const stored = typeof passwordHash === 'string' ? passwordHash : ''
+    let iterations = LEGACY_PASSWORD_HASH_ITERATIONS
+    let expectedHex = stored
+    if (stored.startsWith(`${PASSWORD_HASH_PREFIX}$`)) {
+      const [, iterationText, digest] = stored.split('$')
+      iterations = Number(iterationText)
+      expectedHex = digest || ''
+      if (!Number.isInteger(iterations) || iterations <= 0) {
+        return false
+      }
+    }
+
     const nextHash = crypto
-      .pbkdf2Sync(password, passwordSalt, 120000, 32, 'sha256')
+      .pbkdf2Sync(password, passwordSalt, iterations, 32, 'sha256')
       .toString('hex')
 
-    const expectedBuffer = Buffer.from(passwordHash || '', 'hex')
+    const expectedBuffer = Buffer.from(expectedHex, 'hex')
     const actualBuffer = Buffer.from(nextHash, 'hex')
     if (expectedBuffer.length !== actualBuffer.length || expectedBuffer.length === 0) {
       return false

@@ -7,6 +7,8 @@ const ROOT_DIR = path.resolve(__dirname, '..')
 const SERVER_DIR = path.join(ROOT_DIR, 'server')
 const CLIENT_DIR = path.join(ROOT_DIR, 'client')
 const WS_PORT = 3314
+// 设置 E2E_EXTERNAL_WS_URL 时不启动本地 Node 服务端，直接连接外部服务（例如 wrangler dev 的 Cloudflare 运行时）
+const EXTERNAL_WS_URL = process.env.E2E_EXTERNAL_WS_URL || ''
 const CLIENT_PORT = 3400
 const APP_URL = `http://127.0.0.1:${CLIENT_PORT}`
 
@@ -221,23 +223,25 @@ let serverProcess
 let clientProcess
 
 test.beforeAll(async () => {
-  serverProcess = spawn('node', ['app.js'], {
-    cwd: SERVER_DIR,
-    env: {
-      ...process.env,
-      DAIERYOU_SKIP_MONGO: '1',
-      DAIERYOU_WS_PORT: String(WS_PORT),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  if (!EXTERNAL_WS_URL) {
+    serverProcess = spawn('node', ['app.js'], {
+      cwd: SERVER_DIR,
+      env: {
+        ...process.env,
+        DAIERYOU_SKIP_MONGO: '1',
+        DAIERYOU_WS_PORT: String(WS_PORT),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
 
-  await waitForServerLog(serverProcess, 'WebSocket 服务器启动成功')
+    await waitForServerLog(serverProcess, 'WebSocket 服务器启动成功')
+  }
 
   clientProcess = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(CLIENT_PORT)], {
     cwd: CLIENT_DIR,
     env: {
       ...process.env,
-      VITE_WS_URL: `ws://127.0.0.1:${WS_PORT}`,
+      VITE_WS_URL: EXTERNAL_WS_URL || `ws://127.0.0.1:${WS_PORT}`,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })

@@ -44,6 +44,16 @@ export const QUALITY_PRESETS = {
   low: { dpr: [0.75, 1], shadows: false, sparkles: 0, backgroundTables: false },
 }
 
+const QUALITY_ORDER = ['low', 'medium', 'high']
+
+// 实际生效的画质：用户选择与运行时自动降级上限取较低者
+export function effectiveQuality(quality, qualityCap) {
+  if (!qualityCap) {
+    return quality
+  }
+  return QUALITY_ORDER[Math.min(QUALITY_ORDER.indexOf(quality), QUALITY_ORDER.indexOf(qualityCap))] || quality
+}
+
 const initial = typeof window !== 'undefined'
   ? { ...detectDefaults(), ...(readStored() || {}) }
   : detectDefaults()
@@ -57,11 +67,23 @@ applyToEngine(initial)
 
 const useSettingsStore = create((set, get) => ({
   ...initial,
+  // 帧率过低时的自动降级上限（仅本次会话有效，不持久化）
+  qualityCap: null,
   update: (patch) => {
     const next = { ...get(), ...patch }
-    set(patch)
+    // 用户手动选择画质时，以用户选择为准，清除自动降级
+    set('quality' in patch ? { ...patch, qualityCap: null } : patch)
     applyToEngine(next)
     writeStored(Object.fromEntries(PERSISTED_KEYS.map((key) => [key, next[key]])))
+  },
+  degradeQuality: () => {
+    const current = effectiveQuality(get().quality, get().qualityCap)
+    const index = QUALITY_ORDER.indexOf(current)
+    if (index <= 0) {
+      return false
+    }
+    set({ qualityCap: QUALITY_ORDER[index - 1] })
+    return true
   },
   toggleMuted: () => {
     get().update({ muted: !get().muted })

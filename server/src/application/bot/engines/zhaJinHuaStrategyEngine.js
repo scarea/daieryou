@@ -150,9 +150,14 @@ class ZhaJinHuaStrategyEngine {
   constructor({
     random = Math.random,
     disableExploration = false,
+    // 每次决策的模拟总次数上限（null 不限制）。用于 CPU 受限的运行环境（如 Cloudflare 免费版每次请求 10ms）
+    maxTotalSimulations = null,
   } = {}) {
     this.random = typeof random === 'function' ? random : Math.random
     this.disableExploration = disableExploration === true
+    this.maxTotalSimulations = Number.isInteger(maxTotalSimulations) && maxTotalSimulations > 0
+      ? maxTotalSimulations
+      : null
     this.fullDeck = createFullDeck()
   }
 
@@ -501,6 +506,10 @@ class ZhaJinHuaStrategyEngine {
     const totalTarget = DIFFICULTY_TOTAL_SIMULATIONS[difficulty] || DIFFICULTY_TOTAL_SIMULATIONS.normal
     if (!Number.isInteger(candidateCount) || candidateCount <= 0) {
       return MIN_SIMULATIONS_PER_CANDIDATE
+    }
+    if (this.maxTotalSimulations !== null) {
+      const cappedTotal = Math.min(totalTarget, this.maxTotalSimulations)
+      return clamp(Math.floor(cappedTotal / candidateCount), 4, MAX_SIMULATIONS_PER_CANDIDATE)
     }
     return clamp(
       Math.floor(totalTarget / candidateCount),

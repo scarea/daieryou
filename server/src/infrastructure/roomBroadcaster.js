@@ -1,4 +1,5 @@
-const WebSocket = require('ws')
+// SOCKET_OPEN；不直接依赖 ws 库，Node 与 Cloudflare 的 WebSocket 都适用
+const SOCKET_OPEN = 1
 
 class RoomBroadcaster {
   constructor(sessionRepository) {
@@ -7,7 +8,7 @@ class RoomBroadcaster {
 
   sendToUser(userId, event, data) {
     const session = this.sessionRepository.getByUserId(userId)
-    if (!session || session.ws.readyState !== WebSocket.OPEN) {
+    if (!session || session.ws.readyState !== SOCKET_OPEN) {
       return
     }
 

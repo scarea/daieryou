@@ -1,8 +1,5 @@
-const fs = require('node:fs')
-const path = require('node:path')
 const { Pool } = require('pg')
-
-const SCHEMA_PATH = path.join(__dirname, 'schema.sql')
+const SCHEMA_SQL = require('./schemaSql')
 
 /**
  * Postgres 连接池（用于 Supabase 等托管 Postgres）。
@@ -14,6 +11,8 @@ class PgDatabase {
     this.connectionString = connectionString
     this.logger = logger
     this.ready = false
+    this.lastError = null
+    this.lastAttemptAt = 0
     this.pool = new Pool({
       connectionString,
       max,
@@ -28,11 +27,32 @@ class PgDatabase {
   }
 
   async connect({ migrate = true } = {}) {
-    await this.pool.query('select 1')
-    if (migrate) {
-      await this.pool.query(fs.readFileSync(SCHEMA_PATH, 'utf8'))
+    this.lastAttemptAt = Date.now()
+    try {
+      await this.pool.query('select 1')
+      if (migrate) {
+        await this.pool.query(SCHEMA_SQL)
+      }
+      this.ready = true
+      this.lastError = null
+    } catch (error) {
+      // 只保留错误类型与信息，连接串（含密码）不会出现在 pg 的错误信息里
+      this.lastError = `${error.code || error.name || 'Error'}: ${error.message}`
+      throw error
     }
-    this.ready = true
+  }
+
+  // 未连接时按间隔重试（数据库暂停后恢复、启动时网络抖动等）
+  async ensureConnected({ migrate = true, retryIntervalMs = 30000 } = {}) {
+    if (this.ready || Date.now() - this.lastAttemptAt < retryIntervalMs) {
+      return this.ready
+    }
+    try {
+      await this.connect({ migrate })
+    } catch (error) {
+      // lastError 已记录
+    }
+    return this.ready
   }
 
   isReady() {

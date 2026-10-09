@@ -6,6 +6,7 @@ class RuleDecisionProvider {
     this.engine = options.engine || new ZhaJinHuaStrategyEngine({
       random: options.random,
       disableExploration: options.disableExploration,
+      maxTotalSimulations: options.maxTotalSimulations,
     })
   }
 

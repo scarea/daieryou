@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { AdaptiveDpr, Float, Sparkles } from '@react-three/drei'
+import { AdaptiveDpr, Float, PerformanceMonitor, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
 import useGameStore from '../store/gameStore'
 import CasinoRoom, { ChipStack, CHIP_COLORS } from './CasinoRoom'
@@ -10,7 +10,7 @@ import Avatar3D from './Avatar3D'
 import GameTable3D from './GameTable3D'
 import Podium3D from './Podium3D'
 import useTableUiStore from './tableUiStore'
-import useSettingsStore, { QUALITY_PRESETS } from '../settings/settingsStore'
+import useSettingsStore, { QUALITY_PRESETS, effectiveQuality } from '../settings/settingsStore'
 import { FACE_DOWN, SEATS, SEAT_ORDER, buildSeatAssignments, deckLayerPosition } from './layout'
 
 const SHOWCASE_CARDS = [
@@ -218,7 +218,8 @@ function useLampIntensity(mode) {
   if (mode === 'login') {
     return 0.8
   }
-  if (active) {
+  // 离开房间等情况下 showdown 可能先被清空，而 active 还没来得及复位
+  if (active && showdown?.timeline) {
     return showdown.timeline.isFinal ? 0.22 : 0.6
   }
   return 1
@@ -251,7 +252,8 @@ const WorldScene = ({ mode, preset, onReady }) => {
 }
 
 const World = ({ mode = 'loading' }) => {
-  const quality = useSettingsStore((state) => state.quality)
+  const quality = useSettingsStore((state) => effectiveQuality(state.quality, state.qualityCap))
+  const degradeQuality = useSettingsStore((state) => state.degradeQuality)
   const preset = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high
   const [ready, setReady] = useState(false)
 
@@ -270,6 +272,10 @@ const World = ({ mode = 'loading' }) => {
           <WorldScene mode={mode} preset={preset} onReady={() => setReady(true)} />
         </Suspense>
         <AdaptiveDpr pixelated={false} />
+        {/* 场景就绪后监测帧率：持续低于 40fps 时逐级自动降低画质 */}
+        {ready && (
+          <PerformanceMonitor bounds={() => [40, 1000]} flipflops={Infinity} onDecline={degradeQuality} />
+        )}
       </Canvas>
       {!ready && <div className="world-loading">正在布置牌桌…</div>}
     </div>
