@@ -31,7 +31,7 @@ const DECK_FROM = { position: deckLayerPosition(12), rotation: FACE_DOWN }
 const HIT_Z_RANGE = [19, 11]
 const OVERLAY_Z_RANGE_EMOTE = [26, 25]
 const RANK_LABELS = { 1: '头名', 2: '二游', 3: '末位' }
-const BOT_DIFFICULTY_LABEL = { easy: '简单', normal: '标准', hard: '进阶' }
+const BOT_DIFFICULTY_LABEL = { easy: '简单', normal: '标准', hard: '进阶', peek: '透视' }
 
 function getCardIdentity(card) {
   return card ? `${card.suit || 'joker'}-${card.rank}` : 'unknown'

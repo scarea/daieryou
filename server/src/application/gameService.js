@@ -234,6 +234,12 @@ class GameService {
       knownPublicCards: visiblePublicCards,
       knownRemovedCards: this.buildKnownRemovedCards(room),
       remainingPublicCards,
+      // 透视难度：只给该机器人真人玩家的手牌（不含其他机器人，机器人之间互不通气）
+      knownOpponentHands: player?.botDifficulty === 'peek' && Array.isArray(room?.gameState?.players)
+        ? room.gameState.players
+          .filter((item) => item?.id !== player?.id && item?.isBot !== true)
+          .map((item) => (Array.isArray(item?.handCards) ? item.handCards : []))
+        : [],
       player: {
         id: player?.id,
         username: player?.username,
