@@ -64,7 +64,8 @@ npx vercel deploy --prod
 服务端更新需在 `server/` 下重新执行 `npx wrangler deploy`。
 
 ### 4. 保活（可选）
-Durable Object 不会像 Render 那样休眠，无需保活。若担心 Supabase 7 天无访问被暂停（长时间没人玩时），可在 Supabase SQL Editor 执行 `supabase/keepalive.sql`（把地址换成 `https://daieryou.<子域名>.workers.dev/healthz`），每 10 分钟访问一次，顺带写数据库心跳。
+Durable Object 不会像 Render 那样休眠，无需保活。Supabase 免费项目 7 天无访问会被暂停，因此 `wrangler.toml` 配置了 Cloudflare 定时触发（每 6 小时访问一次 `/healthz` 并写数据库心跳）。
+若项目已被暂停，`/healthz` 会显示 `tenant/user ... not found`，需在 Supabase 控制台点 **Restore project** 恢复。
 
 ## 其他部署方式
 

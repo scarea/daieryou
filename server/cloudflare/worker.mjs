@@ -168,4 +168,10 @@ export default {
     const stub = env.GAME.get(env.GAME.idFromName(GAME_SERVER_NAME))
     return stub.fetch(request)
   },
+
+  // 定时触发（wrangler.toml 的 [triggers]）：访问 /healthz 写一次数据库心跳，防止 Supabase 免费项目 7 天无访问被暂停
+  async scheduled(event, env, ctx) {
+    const stub = env.GAME.get(env.GAME.idFromName(GAME_SERVER_NAME))
+    ctx.waitUntil(stub.fetch('https://daieryou.internal/healthz'))
+  },
 }
