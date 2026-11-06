@@ -6,7 +6,6 @@ COPY client/package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY client/ ./
-COPY shared/ ../shared/
 
 ARG VITE_WS_URL=ws://localhost:3014
 ENV VITE_WS_URL=${VITE_WS_URL}

@@ -122,3 +122,70 @@ test('ZhaJinHuaStrategyEngine should exclude known removed cards from unknown po
   assert.equal(poolKeys.has('diamonds:7'), false)
   assert.equal(poolKeys.has('spades:1'), false)
 })
+
+test('strategy engine should respect a total simulation cap', () => {
+  const { ZhaJinHuaStrategyEngine } = require('../src/application/bot/engines/zhaJinHuaStrategyEngine')
+  const capped = new ZhaJinHuaStrategyEngine({ maxTotalSimulations: 100 })
+  const uncapped = new ZhaJinHuaStrategyEngine()
+  assert.equal(capped.getSimulationCount(10, 'hard'), 10)
+  assert.equal(capped.getSimulationCount(100, 'hard'), 4)
+  assert.ok(uncapped.getSimulationCount(10, 'hard') > 100)
+})
+
+function createPeekInput(difficulty) {
+  return {
+    round: 2,
+    maxRounds: 5,
+    opponentCount: 1,
+    isPublicCardHidden: false,
+    publicCard: { suit: 'spades', rank: 9 },
+    knownPublicCards: [{ suit: 'spades', rank: 9 }],
+    // 真人只剩两张牌：透视机器人能确定他这轮的牌型（9 高牌）
+    knownOpponentHands: [[{ suit: 'clubs', rank: 2 }, { suit: 'diamonds', rank: 4 }]],
+    player: {
+      id: 'bot-1',
+      botDifficulty: difficulty,
+      handCards: [
+        { suit: 'hearts', rank: 9 },
+        { suit: 'clubs', rank: 3 },
+        { suit: 'diamonds', rank: 5 },
+      ],
+    },
+    playerStates: [],
+  }
+}
+
+test('透视难度：用已知的真人手牌模拟，结果确定', () => {
+  const engine = new ZhaJinHuaStrategyEngine()
+  const context = engine.createCandidateContext(createPeekInput('peek'))
+  assert.equal(context.knownOpponentHands.length, 1)
+  assert.equal(context.unknownPool.some((card) => getCardKey(card) === 'clubs:2'), false)
+
+  const result = engine.simulateCandidate([0, 1], context, 200)
+  assert.equal(result.winRate, 1)
+  assert.equal(result.loseRate, 0)
+})
+
+test('非透视难度忽略已知手牌，仍按随机对手模拟', () => {
+  const engine = new ZhaJinHuaStrategyEngine()
+  const context = engine.createCandidateContext(createPeekInput('hard'))
+  assert.equal(context.knownOpponentHands.length, 0)
+  assert.equal(context.unknownPool.some((card) => getCardKey(card) === 'clubs:2'), true)
+
+  const result = engine.simulateCandidate([0, 1], context, 400)
+  assert.ok(result.winRate < 1)
+})
+
+test('透视难度：对手手牌不确定出哪两张时随机假设出法', () => {
+  const engine = new ZhaJinHuaStrategyEngine()
+  const input = createPeekInput('peek')
+  input.opponentCount = 2
+  input.knownOpponentHands = [[
+    { suit: 'clubs', rank: 9 },
+    { suit: 'diamonds', rank: 9 },
+    { suit: 'clubs', rank: 2 },
+  ]]
+  const decision = engine.decideSelection(input)
+  assert.equal(decision.selectedCards.length, 2)
+  assert.equal(decision.meta.difficulty, 'peek')
+})

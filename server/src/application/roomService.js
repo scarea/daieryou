@@ -7,7 +7,7 @@ const DEFAULT_MAX_BOTS_PER_ROOM = 2
 const DEFAULT_SELECTION_TIMEOUT_MS = 60000
 const MIN_SELECTION_TIMEOUT_MS = 10000
 const MAX_SELECTION_TIMEOUT_MS = 180000
-const BOT_DIFFICULTIES = new Set(['easy', 'normal', 'hard'])
+const BOT_DIFFICULTIES = new Set(['easy', 'normal', 'hard', 'peek'])
 
 class RoomService {
   constructor({

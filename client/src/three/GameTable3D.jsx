@@ -9,7 +9,7 @@ import Avatar3D from './Avatar3D'
 import { ChipStack, CHIP_COLORS } from './CasinoRoom'
 import { getCardName, getHandTypeName } from '../utils/cardUtils'
 import soundEngine from '../audio/soundEngine'
-import useSettingsStore, { QUALITY_PRESETS, tapFeedback } from '../settings/settingsStore'
+import useSettingsStore, { QUALITY_PRESETS, effectiveQuality, tapFeedback } from '../settings/settingsStore'
 import ShowdownEffects, { useTimelineFlag } from './ShowdownEffects'
 import { EMOTES } from '../components/emotes'
 import {
@@ -31,7 +31,7 @@ const DECK_FROM = { position: deckLayerPosition(12), rotation: FACE_DOWN }
 const HIT_Z_RANGE = [19, 11]
 const OVERLAY_Z_RANGE_EMOTE = [26, 25]
 const RANK_LABELS = { 1: '头名', 2: '二游', 3: '末位' }
-const BOT_DIFFICULTY_LABEL = { easy: '简单', normal: '标准', hard: '进阶' }
+const BOT_DIFFICULTY_LABEL = { easy: '简单', normal: '标准', hard: '进阶', peek: '透视' }
 
 function getCardIdentity(card) {
   return card ? `${card.suit || 'joker'}-${card.rank}` : 'unknown'
@@ -313,7 +313,7 @@ const GameTable3D = () => {
   const showdown = useTableUiStore((state) => state.showdown)
   const urgent = useTableUiStore((state) => state.urgent)
   const emotes = useTableUiStore((state) => state.emotes)
-  const quality = useSettingsStore((state) => state.quality)
+  const quality = useSettingsStore((state) => effectiveQuality(state.quality, state.qualityCap))
   const reducedMotion = useSettingsStore((state) => state.reducedMotion)
   const moodReached = useTimelineFlag(showdown, showdown?.timeline?.stampAt ?? showdown?.timeline?.outcomeAt)
   const showdownEnded = useTimelineFlag(showdown, showdown?.timeline?.endAt)

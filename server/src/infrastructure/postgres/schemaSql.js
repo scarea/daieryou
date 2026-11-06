@@ -1,4 +1,5 @@
--- 逮二游 Postgres 表结构（Supabase 兼容）。脚本可重复执行，服务端启动时会自动执行一次。
+// 由 supabase/schema.sql 同步而来（测试会校验两者一致）。以 JS 字符串形式内嵌，便于在没有文件系统的环境（Cloudflare Workers）中使用。
+module.exports = `-- 逮二游 Postgres 表结构（Supabase 兼容）。脚本可重复执行，服务端启动时会自动执行一次。
 -- 时间字段统一存毫秒时间戳（bigint），与 MongoDB 版本保持一致。
 
 create table if not exists accounts (
@@ -105,3 +106,4 @@ alter table admin_audit_logs enable row level security;
 alter table battle_records enable row level security;
 alter table battle_record_archives enable row level security;
 alter table service_heartbeats enable row level security;
+`

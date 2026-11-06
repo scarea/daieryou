@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { BattleRecordRepositoryBase } = require('./repositoryBase')
 
 const opponentSchema = new mongoose.Schema({
   playerId: {
@@ -185,84 +186,10 @@ function normalizeMongooseDocument(document) {
   return rest
 }
 
-class BattleRecordRepository {
+class BattleRecordRepository extends BattleRecordRepositoryBase {
   ensureDatabaseReady() {
     if (mongoose.connection.readyState !== 1) {
       throw new Error('战绩系统暂不可用，请检查 MongoDB 连接')
-    }
-  }
-
-  normalizeText(value, maxLength = 64) {
-    if (typeof value !== 'string') {
-      return ''
-    }
-
-    return value.trim().slice(0, maxLength)
-  }
-
-  normalizeNumber(value, fallback = 0) {
-    const number = Number(value)
-    if (!Number.isFinite(number)) {
-      return fallback
-    }
-    return number
-  }
-
-  normalizePositiveInteger(value, fallback = 1, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
-    const number = Math.floor(this.normalizeNumber(value, fallback))
-    if (!Number.isFinite(number)) {
-      return fallback
-    }
-    return Math.min(max, Math.max(min, number))
-  }
-
-  normalizeRank(value, fallback = 3) {
-    const rank = Math.floor(this.normalizeNumber(value, fallback))
-    return rank >= 1 ? rank : fallback
-  }
-
-  normalizeOptionalRank(value) {
-    if (value == null || value === '') {
-      return null
-    }
-
-    const rank = Math.floor(this.normalizeNumber(value, Number.NaN))
-    if (!Number.isFinite(rank) || rank < 1) {
-      return null
-    }
-
-    return rank
-  }
-
-  normalizeOptionalTimestamp(value) {
-    if (value == null || value === '') {
-      return null
-    }
-
-    const timestamp = Math.floor(this.normalizeNumber(value, Number.NaN))
-    if (!Number.isFinite(timestamp) || timestamp < 0) {
-      return null
-    }
-
-    return timestamp
-  }
-
-  normalizeCleanupOptions(options = {}) {
-    return {
-      expireBefore: this.normalizePositiveInteger(options?.expireBefore, Date.now(), { min: 1 }),
-      batchSize: this.normalizePositiveInteger(options?.batchSize, 500, { min: 1, max: 5000 }),
-      archiveEnabled: options?.archiveEnabled !== false,
-    }
-  }
-
-  normalizeQueryOptions(options = {}) {
-    return {
-      limit: this.normalizePositiveInteger(options?.limit, 20, { min: 1, max: 100 }),
-      page: this.normalizePositiveInteger(options?.page, 1, { min: 1, max: 100000 }),
-      roomId: this.normalizeText(options?.roomId, 64),
-      rank: this.normalizeOptionalRank(options?.rank),
-      startTime: this.normalizeOptionalTimestamp(options?.startTime),
-      endTime: this.normalizeOptionalTimestamp(options?.endTime),
     }
   }
 
@@ -290,60 +217,6 @@ class BattleRecordRepository {
   buildExpiredMatchQuery(expireBefore) {
     return {
       finishedAt: { $lt: expireBefore },
-    }
-  }
-
-  buildEmptySummary() {
-    return {
-      totalGames: 0,
-      winCount: 0,
-      totalScoreChange: 0,
-      avgScore: 0,
-    }
-  }
-
-  normalizeRoundScores(roundScores) {
-    if (!Array.isArray(roundScores)) {
-      return []
-    }
-
-    return roundScores.map((score) => this.normalizeNumber(score, 0))
-  }
-
-  normalizeOpponents(opponents) {
-    if (!Array.isArray(opponents)) {
-      return []
-    }
-
-    return opponents
-      .map((opponent) => ({
-        playerId: this.normalizeText(opponent?.playerId, 64),
-        username: this.normalizeText(opponent?.username, 64),
-        totalScore: this.normalizeNumber(opponent?.totalScore, 0),
-        rank: this.normalizeRank(opponent?.rank, 3),
-      }))
-      .filter((opponent) => opponent.playerId)
-  }
-
-  normalizeRecord(record, now = Date.now()) {
-    const userId = this.normalizeText(record?.userId, 64)
-    const matchId = this.normalizeText(record?.matchId, 120)
-    if (!userId || !matchId) {
-      return null
-    }
-
-    return {
-      userId,
-      matchId,
-      roomId: this.normalizeText(record?.roomId, 64),
-      finishedAt: this.normalizeNumber(record?.finishedAt, now),
-      playerCount: Math.max(2, Math.floor(this.normalizeNumber(record?.playerCount, 3))),
-      rank: this.normalizeRank(record?.rank, 3),
-      username: this.normalizeText(record?.username, 64) || userId,
-      totalScore: this.normalizeNumber(record?.totalScore, 0),
-      roundScores: this.normalizeRoundScores(record?.roundScores),
-      opponents: this.normalizeOpponents(record?.opponents),
-      updatedAt: now,
     }
   }
 

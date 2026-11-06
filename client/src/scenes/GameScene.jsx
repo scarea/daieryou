@@ -1057,7 +1057,7 @@ const GameScene = () => {
         </div>
       )}
 
-      <audio ref={bgmAudioRef} src="/audio/game-bgm.wav" preload="auto" loop />
+      <audio ref={bgmAudioRef} src="/audio/game-bgm.mp3" preload="none" loop />
     </section>
   )
 }

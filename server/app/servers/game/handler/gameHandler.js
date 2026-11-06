@@ -1,4 +1,4 @@
-const { appContext } = require('../../../../src/application/appContext')
+const { appContext } = require('../../../../src/application/appContextHolder')
 
 module.exports = function(app) {
   return new Handler(app)

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { AdminAuditRepositoryBase } = require('./repositoryBase')
 
 const adminAuditSchema = new mongoose.Schema({
   action: {
@@ -61,37 +62,10 @@ function normalizeMongooseDocument(document) {
   return rest
 }
 
-class AdminAuditRepository {
-  normalizeText(value, maxLength = 120) {
-    if (typeof value !== 'string') {
-      return ''
-    }
-
-    return value.trim().slice(0, maxLength)
-  }
-
-  normalizeEmail(value) {
-    const normalized = this.normalizeText(value, 120)
-    return normalized ? normalized.toLowerCase() : ''
-  }
-
+class AdminAuditRepository extends AdminAuditRepositoryBase {
   ensureDatabaseReady() {
     if (mongoose.connection.readyState !== 1) {
       throw new Error('审计日志系统暂不可用，请检查 MongoDB 连接')
-    }
-  }
-
-  normalizeDetail(detail) {
-    if (!detail || typeof detail !== 'object') {
-      return {}
-    }
-
-    try {
-      const serialized = JSON.stringify(detail)
-      const parsed = JSON.parse(serialized)
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch (error) {
-      return {}
     }
   }
 

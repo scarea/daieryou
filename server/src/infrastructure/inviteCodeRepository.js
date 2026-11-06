@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { InviteCodeRepositoryBase } = require('./repositoryBase')
 
 const inviteCodeSchema = new mongoose.Schema({
   code: {
@@ -93,23 +94,7 @@ function normalizeMongooseDocument(document) {
   return rest
 }
 
-class InviteCodeRepository {
-  normalizeCode(code) {
-    if (typeof code !== 'string') {
-      return ''
-    }
-
-    return code.trim().toUpperCase()
-  }
-
-  normalizeText(value, maxLength = 64) {
-    if (typeof value !== 'string') {
-      return ''
-    }
-
-    return value.trim().slice(0, maxLength)
-  }
-
+class InviteCodeRepository extends InviteCodeRepositoryBase {
   ensureDatabaseReady() {
     if (mongoose.connection.readyState !== 1) {
       throw new Error('邀请码系统暂不可用，请检查 MongoDB 连接')

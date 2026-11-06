@@ -186,6 +186,8 @@ function loadRuntimeConfig(env = process.env) {
         env.DAIERYOU_BOT_DECISION_TIMEOUT_MS,
         bot.decisionTimeoutMs || 120,
       ),
+      // AI 每次决策的模拟次数上限，CPU 受限环境（Cloudflare 免费版）需要设置
+      maxSimulations: parsePositiveNumber(env.DAIERYOU_BOT_MAX_SIMULATIONS, bot.maxSimulations || null),
       defaultDifficulty: parseNonEmptyString(
         env.DAIERYOU_BOT_DEFAULT_DIFFICULTY,
         bot.defaultDifficulty || 'normal',
@@ -278,6 +280,11 @@ function loadRuntimeConfig(env = process.env) {
         emailAuth.memberDefaultDays || 30,
       ),
       // 目前没有接入支付，自助开通默认关闭，否则任何账号都能无限免费续会员
+      // 密码哈希（PBKDF2-SHA256）迭代次数；CPU 受限环境可调低，已有账号不受影响（迭代次数随哈希一起存储）
+      passwordHashIterations: parsePositiveNumber(
+        env.DAIERYOU_PASSWORD_HASH_ITERATIONS,
+        emailAuth.passwordHashIterations || 120000,
+      ),
       memberSelfServicePurchaseEnabled: parseBoolean(
         env.DAIERYOU_AUTH_MEMBER_SELF_SERVICE_PURCHASE,
         emailAuth.memberSelfServicePurchaseEnabled ?? false,

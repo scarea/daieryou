@@ -13,7 +13,8 @@ function normalizeTimeout(timeoutMs, fallback = DEFAULT_DECISION_TIMEOUT_MS) {
 
 class BotDecisionService {
   constructor({
-    primaryProvider = new RuleDecisionProvider(),
+    maxSimulations = null,
+    primaryProvider = new RuleDecisionProvider({ maxTotalSimulations: maxSimulations }),
     fallbackProvider = new FallbackDecisionProvider(),
     decisionTimeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
     llmConfig = null,

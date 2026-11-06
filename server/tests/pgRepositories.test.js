@@ -120,3 +120,11 @@ test('pg database heartbeat should upsert a single row', { skip }, async () => {
   assert.equal(rows.length, 1)
   assert.deepEqual(rows[0].detail, { n: 2 })
 })
+
+test('embedded schema should match supabase/schema.sql', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const embedded = require('../src/infrastructure/postgres/schemaSql')
+  const file = fs.readFileSync(path.join(__dirname, '../../supabase/schema.sql'), 'utf8')
+  assert.equal(embedded, file)
+})

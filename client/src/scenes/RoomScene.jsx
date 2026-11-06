@@ -18,6 +18,7 @@ const BOT_DIFFICULTY_OPTIONS = [
   { value: 'easy', label: '简单' },
   { value: 'normal', label: '标准' },
   { value: 'hard', label: '进阶' },
+  { value: 'peek', label: '透视（搞笑）' },
 ]
 const ROUND_TIMEOUT_OPTIONS = [
   { value: 30, label: '30 秒' },

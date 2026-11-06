@@ -1,4 +1,4 @@
-const { appContext } = require('../../../../src/application/appContext')
+const { appContext } = require('../../../../src/application/appContextHolder')
 
 module.exports = function(app) {
   return new Handler(app)
@@ -132,4 +132,8 @@ class Handler {
   }
 }
 
-module.exports.rooms = appContext.roomRepository.rooms
+// 兼容旧导出；改为惰性读取，避免在 appContext 尚未初始化时（如 Cloudflare 启动阶段）访问
+Object.defineProperty(module.exports, 'rooms', {
+  enumerable: true,
+  get: () => appContext.roomRepository?.rooms,
+})

@@ -39,3 +39,7 @@ blob-report/
 # Temp files
 tmp/
 temp/
+
+# Cloudflare 本地开发密钥
+.dev.vars
+.wrangler/

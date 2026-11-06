@@ -1,51 +1,61 @@
 const gameConfig = require('../../../../config/game-config.json')
 const { evaluateHand, compareHands } = require('../../../domain/gameEngine')
 
-const BOT_DIFFICULTIES = new Set(['easy', 'normal', 'hard'])
+// peek（透视，搞笑难度）：参数同进阶，但能看到真人玩家的手牌；机器人之间互不通气，各自决策
+const BOT_DIFFICULTIES = new Set(['easy', 'normal', 'hard', 'peek'])
 const DIFFICULTY_TOTAL_SIMULATIONS = {
   easy: 900,
   normal: 1800,
   hard: 3000,
+  peek: 3000,
 }
 const DIFFICULTY_WIN_MULTIPLIER = {
   easy: 1,
   normal: 1.05,
   hard: 1.12,
+  peek: 1.12,
 }
 const DIFFICULTY_LOSE_MULTIPLIER = {
   easy: 1,
   normal: 1.2,
   hard: 1.4,
+  peek: 1.4,
 }
 const DIFFICULTY_EXPLORATION_RATE = {
   easy: 0.38,
   normal: 0.16,
   hard: 0.04,
+  peek: 0.04,
 }
 const DIFFICULTY_EXPLORATION_POOL = {
   easy: 4,
   normal: 2,
   hard: 2,
+  peek: 2,
 }
 const DIFFICULTY_RISK_WEIGHT = {
   easy: 0.08,
   normal: 0.16,
   hard: 0.3,
+  peek: 0.3,
 }
 const DIFFICULTY_WIN_WEIGHT = {
   easy: 0.12,
   normal: 0.2,
   hard: 0.3,
+  peek: 0.3,
 }
 const DIFFICULTY_THIRD_WEIGHT = {
   easy: 0.16,
   normal: 0.24,
   hard: 0.28,
+  peek: 0.28,
 }
 const DIFFICULTY_RESERVE_WEIGHT = {
   easy: 0.22,
   normal: 0.3,
   hard: 0.34,
+  peek: 0.34,
 }
 const MIN_SIMULATIONS_PER_CANDIDATE = 32
 const MAX_SIMULATIONS_PER_CANDIDATE = 220
@@ -150,9 +160,14 @@ class ZhaJinHuaStrategyEngine {
   constructor({
     random = Math.random,
     disableExploration = false,
+    // 每次决策的模拟总次数上限（null 不限制）。用于 CPU 受限的运行环境（如 Cloudflare 免费版每次请求 10ms）
+    maxTotalSimulations = null,
   } = {}) {
     this.random = typeof random === 'function' ? random : Math.random
     this.disableExploration = disableExploration === true
+    this.maxTotalSimulations = Number.isInteger(maxTotalSimulations) && maxTotalSimulations > 0
+      ? maxTotalSimulations
+      : null
     this.fullDeck = createFullDeck()
   }
 
@@ -204,7 +219,7 @@ class ZhaJinHuaStrategyEngine {
     return picked
   }
 
-  buildUnknownPool({ handCards, knownPublicCards, knownRemovedCards }) {
+  buildUnknownPool({ handCards, knownPublicCards, knownRemovedCards, knownOpponentHands = [] }) {
     const knownSet = new Set()
     const mergeCards = (cards) => {
       if (!Array.isArray(cards)) {
@@ -218,6 +233,7 @@ class ZhaJinHuaStrategyEngine {
     mergeCards(handCards)
     mergeCards(knownPublicCards)
     mergeCards(knownRemovedCards)
+    knownOpponentHands.forEach(mergeCards)
 
     return this.fullDeck.filter((card) => !knownSet.has(getCardKey(card)))
   }
@@ -248,11 +264,17 @@ class ZhaJinHuaStrategyEngine {
     const knownPublicCards = Array.isArray(input.knownPublicCards) ? input.knownPublicCards : []
     const knownRemovedCards = Array.isArray(input.knownRemovedCards) ? input.knownRemovedCards : []
     const remainingPublicCards = Array.isArray(input.remainingPublicCards) ? input.remainingPublicCards : []
-    const unknownPool = this.buildUnknownPool({ handCards, knownPublicCards, knownRemovedCards })
     const difficulty = normalizeDifficulty(input?.player?.botDifficulty || input?.difficulty)
+    const opponentCount = Math.max(0, Number(input.opponentCount || 2))
+    // 只有透视难度才使用已知的对手手牌；只取至少 2 张的手牌，且不超过对手人数
+    const knownOpponentHands = difficulty === 'peek' && Array.isArray(input.knownOpponentHands)
+      ? input.knownOpponentHands
+        .filter((cards) => Array.isArray(cards) && cards.length >= 2)
+        .slice(0, opponentCount)
+      : []
+    const unknownPool = this.buildUnknownPool({ handCards, knownPublicCards, knownRemovedCards, knownOpponentHands })
     const round = Number.isFinite(Number(input.round)) ? Number(input.round) : 1
     const maxRounds = Number.isFinite(Number(input.maxRounds)) ? Number(input.maxRounds) : gameConfig.gameRounds
-    const opponentCount = Math.max(0, Number(input.opponentCount || 2))
     const roundScore = getRoundScore(round)
     const futureScoreTotal = (() => {
       let sum = 0
@@ -268,6 +290,8 @@ class ZhaJinHuaStrategyEngine {
       maxRounds,
       handCards,
       unknownPool,
+      knownOpponentHands,
+      knownOpponentPairs: knownOpponentHands.map((cards) => buildPairIndices(cards)),
       difficulty,
       opponentCount,
       roundScore,
@@ -427,7 +451,8 @@ class ZhaJinHuaStrategyEngine {
       const opponentPool = context.isPublicCardHidden
         ? context.unknownPool.filter((item) => getCardKey(item) !== getCardKey(publicCard))
         : context.unknownPool
-      if (opponentPool.length < context.opponentCount * 2) {
+      const unknownOpponentCount = context.opponentCount - context.knownOpponentHands.length
+      if (opponentPool.length < unknownOpponentCount * 2) {
         continue
       }
 
@@ -436,13 +461,18 @@ class ZhaJinHuaStrategyEngine {
 
       const sampledIndices = this.pickDistinctIndices(
         opponentPool.length,
-        context.opponentCount * 2,
+        unknownOpponentCount * 2,
       )
-      if (sampledIndices.length < context.opponentCount * 2) {
+      if (sampledIndices.length < unknownOpponentCount * 2) {
         continue
       }
 
-      const opponentEvaluations = []
+      // 已知手牌的对手：手牌看得到，但不知道他这轮出哪两张，随机假设一种出法
+      const opponentEvaluations = context.knownOpponentHands.map((cards, handIndex) => {
+        const pairs = context.knownOpponentPairs[handIndex]
+        const [pairLeft, pairRight] = pairs[this.randomIndex(pairs.length)]
+        return evaluateHand([cards[pairLeft], cards[pairRight], publicCard])
+      })
       for (let cursor = 0; cursor < sampledIndices.length; cursor += 2) {
         const cardA = opponentPool[sampledIndices[cursor]]
         const cardB = opponentPool[sampledIndices[cursor + 1]]
@@ -501,6 +531,10 @@ class ZhaJinHuaStrategyEngine {
     const totalTarget = DIFFICULTY_TOTAL_SIMULATIONS[difficulty] || DIFFICULTY_TOTAL_SIMULATIONS.normal
     if (!Number.isInteger(candidateCount) || candidateCount <= 0) {
       return MIN_SIMULATIONS_PER_CANDIDATE
+    }
+    if (this.maxTotalSimulations !== null) {
+      const cappedTotal = Math.min(totalTarget, this.maxTotalSimulations)
+      return clamp(Math.floor(cappedTotal / candidateCount), 4, MAX_SIMULATIONS_PER_CANDIDATE)
     }
     return clamp(
       Math.floor(totalTarget / candidateCount),

@@ -556,3 +556,18 @@ test('finished room should mark bots as ready for the next game', async () => {
   assert.equal(room.status, 'finished')
   assert.deepEqual(room.restartReadyIds, ['bot-1', 'bot-2'])
 })
+
+test('透视难度机器人只拿到真人手牌，普通机器人拿不到', () => {
+  const human = { id: 'u1', handCards: [{ suit: 'hearts', rank: 1 }, { suit: 'clubs', rank: 2 }] }
+  const peekBot = { id: 'bot-a', isBot: true, botDifficulty: 'peek', handCards: [{ suit: 'spades', rank: 3 }] }
+  const hardBot = { id: 'bot-b', isBot: true, botDifficulty: 'hard', handCards: [{ suit: 'spades', rank: 4 }] }
+  const room = {
+    id: 'room-peek',
+    gameState: { currentRound: 1, maxRounds: 5, publicCards: [], roundResults: [], players: [human, peekBot, hardBot] },
+  }
+  const service = Object.create(GameService.prototype)
+  service.isSelectionRound = () => true
+
+  assert.deepEqual(service.buildBotDecisionInput(room, peekBot).knownOpponentHands, [human.handCards])
+  assert.deepEqual(service.buildBotDecisionInput(room, hardBot).knownOpponentHands, [])
+})
