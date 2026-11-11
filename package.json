@@ -1,31 +1,41 @@
 {
-  "name": "daieryou",
+  "name": "daieryou-royale",
   "version": "1.0.0",
-  "description": "逮二游棋牌游戏 - 3人炸金花游戏",
-  "main": "index.js",
+  "private": true,
+  "description": "逮二游 · 金殿 —— 三人炸金花变种（逮二）在线棋牌",
+  "type": "module",
   "scripts": {
-    "dev:client": "cd client && npm run dev",
-    "dev:server": "cd server && npm run dev",
-    "dev:all": "bash ./scripts/dev-up.sh",
-    "build:client": "cd client && npm run build",
-    "start:server": "cd server && npm start",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "tsx watch src/server/main.ts",
+    "dev:client": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "NODE_ENV=production tsx src/server/main.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "deploy:server": "wrangler deploy",
+    "deploy:web": "vercel deploy --prod"
   },
-  "keywords": [
-    "game",
-    "poker",
-    "multiplayer",
-    "web"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
-  "workspaces": [
-    "client",
-    "server"
-  ],
+  "dependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
+    "ws": "^8.18.0",
+    "zustand": "^5.0.2"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.14",
+    "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "wrangler": "^4.160.0"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

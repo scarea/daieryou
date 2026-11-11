@@ -1,0 +1,32 @@
+# Cloudflare Workers + Durable Objects 部署配置（免费版可用）
+# 部署：npm run deploy:server
+name = "daieryou-royale"
+main = "src/worker/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "GAME"
+class_name = "GameServer"
+
+# 免费版只支持 SQLite 后端的 Durable Object（本项目不使用其存储，数据都在 Postgres）
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameServer"]
+
+# 复用旧版 daieryou 的 Supabase 库（经 Hyperdrive 连接）；新表统一带 royale_ 前缀
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "ee552c814e5541038f52d0e600df41a9"
+
+[vars]
+# 免费版每次请求 CPU 上限 10ms：压低 AI 模拟次数与密码哈希迭代次数（迭代次数随哈希存储，可随时调整）
+BOT_SIM_SCALE = "0.35"
+PASSWORD_HASH_ITERATIONS = "20000"
+
+[triggers]
+crons = ["0 */6 * * *"]
+
+[observability]
+enabled = true
