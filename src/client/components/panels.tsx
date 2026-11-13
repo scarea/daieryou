@@ -7,6 +7,7 @@ import {
 import { makeCard } from '../../shared/cards.ts'
 import { GAMES, GameId, gameById } from '../../shared/games.ts'
 import { MahjongRulesBody } from '../mahjong/MahjongRules.tsx'
+import { LiuhuRulesBody } from '../liuhu/LiuhuRules.tsx'
 import type { LeaderboardRow, LedgerItem, MatchRecord, SigninStatus, UserProfile } from '../../shared/protocol.ts'
 import { api } from '../net.ts'
 import { useStore } from '../store.ts'
@@ -173,8 +174,8 @@ export function RecordsModal({ onClose }: Close) {
               <Coins value={record.coinsDelta} signed size={18} />
               <span className={`record-honor num ${record.honorDelta >= 0 ? 'up' : 'down'}`}>{record.honorDelta >= 0 ? '+' : ''}{record.honorDelta} 誉</span>
             </button>
-            {open === record.id && record.game === 'mahjong' && <p className="record-summary">{hallById(record.hallId)?.name} · 每分 {formatCoins(record.stake)} 金币 · {record.summary ?? ''}</p>}
-            {open === record.id && record.game !== 'mahjong' && (
+            {open === record.id && (record.game === 'mahjong' || record.game === 'liuhu') && <p className="record-summary">{hallById(record.hallId)?.name} · 每分 {formatCoins(record.stake)} 金币 · {record.summary ?? ''}</p>}
+            {open === record.id && record.game !== 'mahjong' && record.game !== 'liuhu' && (
               <table className="record-detail">
                 <thead>
                   <tr>
@@ -231,6 +232,7 @@ export function RulesModal({ onClose, onTutorial, initial = 'mahjong' }: Close &
         ))}
       </div>
       {game === 'mahjong' && <MahjongRulesBody />}
+      {game === 'liuhu' && <LiuhuRulesBody />}
       <div className="rules" style={{ display: game === 'd2y' ? undefined : 'none' }}>
         {onTutorial && <div className="rules-tutorial"><Button kind="gold" size="sm" onClick={onTutorial}>看图解教学</Button></div>}
         <section>

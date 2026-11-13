@@ -8,14 +8,13 @@ import { HAND_NAME, ResolvedCard, describeHand, evaluateHand } from '../../share
 import { EMOTES, RoomView } from '../../shared/protocol.ts'
 import { CardView } from '../components/CardView.tsx'
 import { RulesModal } from '../components/panels.tsx'
+import { useStage } from '../components/Stage.tsx'
 import { Button, Coins, Modal, MusicToggle, SoundToggle } from '../components/ui.tsx'
 import { useStore } from '../store.ts'
 import { sfx } from '../sound.ts'
 import { HistoryModal, ResultOverlay, SeatPlate, Side, WaitingPanel } from './TableParts.tsx'
 
-const CARD_W = 104
 const CARD_H = 146
-const HAND_Y = 612
 const DEAL_FROM = { x: 640, y: 96 }
 const SLOT: Record<Side, { x: number; y: number }> = {
   me: { x: 640, y: 410 },
@@ -28,6 +27,38 @@ const OPP_HAND: Record<Side, { x: number; y: number }> = {
   right: { x: 1044, y: 196 },
 }
 const PUBLIC_POS = (index: number) => ({ x: 640 + (index - 1.5) * 90, y: 226 })
+
+// ------------------------------ 镜头 ------------------------------
+// 桌面是一块绕水平轴向后倾斜的平面；桌上的牌平躺在上面，我的手牌竖在屏幕前。
+const PIVOT_Y = 316 // 桌面坐标里的桌心
+interface Camera {
+  /** 桌心在屏幕上的 y */
+  cy: number
+  /** 桌面整体缩放 */
+  k: number
+  angle: number
+  persp: number
+  oy: number
+  handY: number
+  handScale: number
+  handGap: number
+}
+const CAMERA: Record<'wide' | 'phone', Camera> = {
+  wide: { cy: 322, k: 1, angle: 38, persp: 1900, oy: 120, handY: 612, handScale: 1, handGap: 96 },
+  phone: { cy: 246, k: 0.82, angle: 38, persp: 1900, oy: 90, handY: 494, handScale: 1.12, handGap: 108 },
+}
+
+/** 桌面上的点 → 屏幕坐标（给悬浮在牌上方的标签、金币飞行用） */
+function project(cam: Camera, x: number, y: number): { x: number; y: number } {
+  const theta = (cam.angle * Math.PI) / 180
+  const dx = (x - 640) * cam.k
+  const dy = (y - PIVOT_Y) * cam.k
+  const px = 640 + dx
+  const py = cam.cy + dy * Math.cos(theta)
+  const z = dy * Math.sin(theta)
+  const f = cam.persp / (cam.persp - z)
+  return { x: 640 + (px - 640) * f, y: cam.oy + (py - cam.oy) * f }
+}
 
 interface Entity {
   key: string
@@ -59,6 +90,8 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
   const result = useStore((state) => state.result)
   const dismissResult = useStore((state) => state.dismissResult)
   const clockOffset = useStore((state) => state.clockOffset)
+  const { mode } = useStage()
+  const cam = CAMERA[mode === 'phone' ? 'phone' : 'wide']
 
   const user = useStore((state) => state.user)
   const game = room.game
@@ -263,10 +296,10 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
           const isSelected = selected.includes(card.id)
           entities.push({
             key: card.id,
-            x: 640 + offset * 96,
-            y: HAND_Y + Math.abs(offset) * 5 - (isSelected ? 34 : 0),
+            x: 640 + offset * cam.handGap,
+            y: cam.handY + Math.abs(offset) * 5 - (isSelected ? 34 : 0),
             rot: offset * 2.4,
-            scale: 1,
+            scale: cam.handScale,
             z: 30 + index,
             card,
             faceUp: true,
@@ -437,16 +470,14 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
       </header>
 
       {/* ------------------------------ 牌桌 ------------------------------ */}
-      <div className="felt">
-        <div className="felt-inner">
-          <div className="felt-emblem">逮</div>
-        </div>
-      </div>
-
-      {showTable && game && (
-        <>
-          <div className={`prompt ${verdict && lastResult?.losers.length ? 'hot' : ''}`} key={prompt}>{prompt}</div>
-          {game.publicCards.map((_, index) => {
+      <div className="p3-cam" style={{ perspective: `${cam.persp}px`, perspectiveOrigin: `640px ${cam.oy}px` }}>
+        <div className="p3-plane" style={{ transform: `translate3d(640px, ${cam.cy}px, 0) rotateX(${cam.angle}deg) scale(${cam.k}) translate3d(-640px, ${-PIVOT_Y}px, 0)` }}>
+          <div className="felt">
+            <div className="felt-inner">
+              <div className="felt-emblem">逮</div>
+            </div>
+          </div>
+          {showTable && game && game.publicCards.map((_, index) => {
             const pos = PUBLIC_POS(index)
             const current = phase !== 'finished' && index === round - 1
             return (
@@ -455,8 +486,10 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
               </div>
             )
           })}
-        </>
-      )}
+        </div>
+      </div>
+
+      {showTable && game && <div className={`prompt ${verdict && lastResult?.losers.length ? 'hot' : ''}`} key={prompt}>{prompt}</div>}
 
       {!showTable && <WaitingPanel room={liveRoom} />}
 
@@ -486,15 +519,19 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
       ))}
 
       {/* ------------------------------ 牌 ------------------------------ */}
-      <div className="card-layer">
-        {entities.map((entity) => (
+      <div className="card-layer" style={{ perspective: `${cam.persp}px`, perspectiveOrigin: `640px ${cam.oy}px` }}>
+        {entities.map((entity) => {
+          // 手牌竖在屏幕前；其余的牌平躺在倾斜的桌面上
+          const upright = (entity.cls ?? '').split(' ').includes('hand')
+          const local = `rotate(${entity.rot ?? 0}deg) scale(${entity.scale})`
+          const transform = upright
+            ? `translate3d(${entity.x}px, ${entity.y}px, 0) ${local}`
+            : `translate3d(640px, ${cam.cy}px, 0) rotateX(${cam.angle}deg) scale(${cam.k}) translate3d(${entity.x - 640}px, ${entity.y - PIVOT_Y}px, ${1 + (entity.z % 10) * 0.4}px) ${local}`
+          return (
           <div
             key={entity.key}
-            className={`ent ${entity.cls ?? ''}`}
-            style={{
-              transform: `translate(${entity.x - CARD_W / 2}px, ${entity.y - CARD_H / 2}px) rotate(${entity.rot ?? 0}deg) scale(${entity.scale})`,
-              zIndex: entity.z,
-            }}
+            className={`ent ${upright ? '' : 'flat'} ${entity.cls ?? ''}`}
+            style={{ transform, zIndex: entity.z }}
             onClick={entity.onClick}
           >
             <div
@@ -508,7 +545,8 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
               <CardView card={entity.card} faceUp={entity.faceUp} wildAs={entity.wildAs} tag={entity.tag} />
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* ------------------------------ 亮牌结果 ------------------------------ */}
@@ -520,7 +558,7 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
         const lose = lastResult.losers.includes(seat)
         const win = lastResult.winners.includes(seat)
         return (
-          <div key={`${lastResult.round}-${seat}`} className={`verdict verdict-${side}`} style={{ left: SLOT[side].x, top: SLOT[side].y }}>
+          <div key={`${lastResult.round}-${seat}`} className={`verdict verdict-${side}`} style={{ left: project(cam, SLOT[side].x, SLOT[side].y).x, top: project(cam, SLOT[side].x, SLOT[side].y).y }}>
             {entry.evaluation.type === 'leopard' && <div className="leopard-burst">豹子！</div>}
             {verdict && win && <div className="win-sparks">{Array.from({ length: 8 }, (_, index) => <i key={index} style={{ ['--a' as string]: `${index * 45}deg` }} />)}</div>}
             <div className={`hand-plaque type-${entry.evaluation.type}`}>
@@ -542,8 +580,8 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
 
       {/* 金币飞行 */}
       {inShowdown && verdict && phase !== 'finished' && lastResult?.transfers.map((transfer, tIndex) => {
-        const from = SLOT[sideOf(transfer.from)]
-        const to = SLOT[sideOf(transfer.to)]
+        const from = project(cam, SLOT[sideOf(transfer.from)].x, SLOT[sideOf(transfer.from)].y)
+        const to = project(cam, SLOT[sideOf(transfer.to)].x, SLOT[sideOf(transfer.to)].y)
         return Array.from({ length: transfer.doubled ? 12 : 7 }, (_, index) => (
           <i
             key={`${lastResult.round}-${tIndex}-${index}`}

@@ -4,6 +4,7 @@ import type { AdminUser, ClientMessage, FriendInfo, ServerEvent } from '../share
 import { SHOP_ITEMS } from '../shared/shop.ts'
 import { Accounts, AppError } from './accounts.ts'
 import { MahjongManager, MjTimings } from './mahjong.ts'
+import { LhTimings, LiuhuManager } from './liuhu.ts'
 import { Hub, RoomManager, RoomTimings } from './rooms.ts'
 import type { Store, UserRow } from './store.ts'
 
@@ -42,7 +43,7 @@ export const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Max-Age': '86400',
 }
 
-export function createApp(store: Store, options: { hashIterations?: number; timings?: RoomTimings; adminKey?: string; dataKey?: string; mjTimings?: MjTimings } = {}) {
+export function createApp(store: Store, options: { hashIterations?: number; timings?: RoomTimings; adminKey?: string; dataKey?: string; mjTimings?: MjTimings; lhTimings?: LhTimings } = {}) {
   const accounts = new Accounts(store, options.hashIterations, options.adminKey, options.dataKey)
   const connections = new Map<string, Connection>()
 
@@ -62,10 +63,13 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
   const rooms = new RoomManager(accounts, hub, options.timings)
   const mahjong = new MahjongManager(accounts, hub, options.mjTimings)
   // 两个游戏的牌桌服务互相打通：大厅列表合并、房号不重复、一个人只在一张桌上
-  rooms.extraLobbyRooms = () => mahjong.lobbyRooms()
-  rooms.busyElsewhere = (userId) => mahjong.has(userId)
+  const liuhu = new LiuhuManager(accounts, hub, options.lhTimings)
+  rooms.extraLobbyRooms = () => [...mahjong.lobbyRooms(), ...liuhu.lobbyRooms()]
+  rooms.busyElsewhere = (userId) => mahjong.has(userId) || liuhu.has(userId)
   mahjong.onLobbyChange = () => rooms.refreshLobby()
-  mahjong.idTaken = (id) => rooms.hasRoom(id)
+  mahjong.idTaken = (id) => rooms.hasRoom(id) || liuhu.hasRoom(id)
+  liuhu.onLobbyChange = () => rooms.refreshLobby()
+  liuhu.idTaken = (id) => rooms.hasRoom(id) || mahjong.hasRoom(id)
 
   // ------------------------------ HTTP ------------------------------
 
@@ -165,7 +169,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
       const user = await requireAuth(request)
       const friends: FriendInfo[] = (await store.listFriends(user.id)).map((row) => ({
         id: row.id, nickname: row.nickname, avatar: row.avatar, frame: row.frame || '', honor: row.honor,
-        online: connections.has(row.id), room: mahjong.publicRoomOf(row.id) ?? rooms.publicRoomOf(row.id),
+        online: connections.has(row.id), room: mahjong.publicRoomOf(row.id) ?? liuhu.publicRoomOf(row.id) ?? rooms.publicRoomOf(row.id),
       }))
       friends.sort((a, b) => Number(b.online) - Number(a.online))
       return { friends }
@@ -235,12 +239,29 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
 
   function handleOp(userId: string, message: ClientMessage): unknown {
     // 麻将桌与扑克房间互斥：一次只能在一张桌上
+    const entering = /:(start|match|create)$/.test(message.op)
     if (message.op.startsWith('mj:')) {
-      if (rooms.roomOf(userId)) throw new AppError('请先离开当前的牌桌')
-    } else if (mahjong.has(userId) && ['quick', 'create', 'match', 'spectate'].includes(message.op)) {
-      throw new AppError('请先离开麻将桌')
+      if (rooms.roomOf(userId) || (entering && liuhu.has(userId))) throw new AppError('请先离开当前的牌桌')
+    } else if (message.op.startsWith('lh:')) {
+      if (rooms.roomOf(userId) || (entering && mahjong.has(userId))) throw new AppError('请先离开当前的牌桌')
+    } else if ((mahjong.has(userId) || liuhu.has(userId)) && ['quick', 'create', 'match', 'spectate'].includes(message.op)) {
+      throw new AppError('请先离开当前的牌桌')
     }
     switch (message.op) {
+      case 'lh:start':
+        return liuhu.start(userId, String(message.hallId), message.level)
+      case 'lh:match':
+        return liuhu.match(userId, String(message.hallId))
+      case 'lh:create':
+        return liuhu.create(userId, String(message.hallId), Boolean(message.isPrivate), message.level)
+      case 'lh:begin':
+        return liuhu.beginByHost(userId)
+      case 'lh:act':
+        return liuhu.act(userId, message.action)
+      case 'lh:next':
+        return liuhu.next(userId)
+      case 'lh:leave':
+        return liuhu.leave(userId)
       case 'mj:start':
         return mahjong.start(userId, String(message.hallId), message.level, message.options)
       case 'mj:match':
@@ -265,10 +286,14 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
         // 房号在哪个游戏的牌桌服务里，就交给谁
         const roomId = String(message.roomId).trim()
         if (mahjong.hasRoom(roomId)) {
-          if (rooms.roomOf(userId)) throw new AppError('请先离开当前的牌桌')
+          if (rooms.roomOf(userId) || liuhu.has(userId)) throw new AppError('请先离开当前的牌桌')
           return mahjong.join(userId, roomId)
         }
-        if (mahjong.has(userId)) throw new AppError('请先离开麻将桌')
+        if (liuhu.hasRoom(roomId)) {
+          if (rooms.roomOf(userId) || mahjong.has(userId)) throw new AppError('请先离开当前的牌桌')
+          return liuhu.join(userId, roomId)
+        }
+        if (mahjong.has(userId) || liuhu.has(userId)) throw new AppError('请先离开当前的牌桌')
         return rooms.join(userId, roomId)
       }
       case 'match':
@@ -345,6 +370,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
           reply({ ev: 'res', id, ok: true, data: { user: await accounts.profile(user.id) } })
           await rooms.onConnect(user.id)
           mahjong.onConnect(user.id)
+          liuhu.onConnect(user.id)
           return
         }
         if (!connection.userId) throw new AppError('请先登录', 401)
@@ -362,11 +388,12 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
         connections.delete(userId)
         void rooms.onDisconnect(userId).catch(() => {})
         mahjong.onDisconnect(userId)
+        liuhu.onDisconnect(userId)
       }
     }
 
     return { onMessage, onClose }
   }
 
-  return { accounts, rooms, mahjong, handleHttp, attach, onlineCount: () => connections.size }
+  return { accounts, rooms, mahjong, liuhu, handleHttp, attach, onlineCount: () => connections.size }
 }

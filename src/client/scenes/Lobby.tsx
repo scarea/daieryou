@@ -4,6 +4,7 @@ import { HALLS, RELIEF_THRESHOLD, formatCoins, hallById, levelOf, titleOf } from
 import { GAMES, GameId, gameById } from '../../shared/games.ts'
 import { DEFAULT_OPTIONS, MjOptions } from '../../shared/mahjong/game.ts'
 import { MJ_LEVELS, MJ_LEVEL_DESC, MJ_LEVEL_NAME, MjLevel } from '../../shared/mahjong/view.ts'
+import { LH_LEVEL_DESC } from '../../shared/liuhu/view.ts'
 import { BOT_LEVEL_NAME, BotLevel, LobbyRoom } from '../../shared/protocol.ts'
 import { AdminModal, FriendsModal, GrowthModal, ShopModal, Tutorial } from '../components/features.tsx'
 import { LeaderboardModal, ProfileModal, RecordsModal, RulesModal, SigninModal } from '../components/panels.tsx'
@@ -29,6 +30,14 @@ const TIPS: Record<GameId, string[]> = {
     '放杠要付 3 分：手里捏着三张的牌，别人大概率也在等。',
     '抓鸟看点数：一、九、红中 10 分，其余点数加一。',
     '人机试炼里打开「教练提示」，能看到每张牌打出去之后的进张数。',
+  ],
+  liuhu: [
+    '六胡就能胡 —— 玩的是「抢」不是「大」，能胡就胡。',
+    '摸的牌不入手，手牌只减不增：起手的对子、坎和红牌几张，基本定了方向。',
+    '放炮是一个人赔三份，没人打过的生牌要掂量。',
+    '小碰是白碰（0 胡），只在差一门就拢时才值得碰。',
+    '想吃没吃、能碰没碰，这张牌就成了臭牌，之后不能再吃碰。',
+    '全黑 5 倍、一点 4 倍：红牌少到极致，比小红还值钱。',
   ],
   d2y: [
     '第二名才是输家 —— 牌不够大时，不妨干脆出最小的。',
@@ -148,15 +157,15 @@ export function Lobby() {
 
   const playWithBots = () => {
     if (!guard()) return
-    void send(game === 'mahjong' ? { op: 'mj:start', hallId, level: mjLevel, options: mjOptions } : { op: 'quick', hallId, botLevel })
+    void send(game === 'mahjong' ? { op: 'mj:start', hallId, level: mjLevel, options: mjOptions } : game === 'liuhu' ? { op: 'lh:start', hallId, level: mjLevel } : { op: 'quick', hallId, botLevel })
   }
   const quickMatch = () => {
     if (!guard()) return
-    void send(game === 'mahjong' ? { op: 'mj:match', hallId } : { op: 'match', hallId })
+    void send(game === 'mahjong' ? { op: 'mj:match', hallId } : game === 'liuhu' ? { op: 'lh:match', hallId } : { op: 'match', hallId })
   }
   const createTable = () => {
     if (!guard()) return
-    void send(game === 'mahjong' ? { op: 'mj:create', hallId, isPrivate, level: mjLevel, options: mjOptions } : { op: 'create', hallId, isPrivate })
+    void send(game === 'mahjong' ? { op: 'mj:create', hallId, isPrivate, level: mjLevel, options: mjOptions } : game === 'liuhu' ? { op: 'lh:create', hallId, isPrivate, level: mjLevel } : { op: 'create', hallId, isPrivate })
   }
 
   const menu: [Exclude<ModalKey, null>, string, string, boolean][] = [
@@ -253,7 +262,7 @@ export function Lobby() {
               <span className="hall-glyph">{HALL_GLYPH[item.id]}</span>
               <span className="hall-name gold-text">{item.name}</span>
               <span className="hall-stake">
-                <small>{game === 'mahjong' ? '每分' : '底注'}</small>
+                <small>{game === 'd2y' ? '底注' : '每分'}</small>
                 <b className="num">{formatCoins(item.stake)}</b>
               </span>
               <span className="hall-min">{locked ? `需 ${formatCoins(item.minCoins)} 金币` : `${formatCoins(item.minCoins)} 金币入场`}</span>
@@ -274,13 +283,13 @@ export function Lobby() {
         <div className="divider" />
         <div className="play-body">
           <div className="play-row">
-            <span className="muted">{game === 'mahjong' ? '每分' : '底注'}</span>
+            <span className="muted">{game === 'd2y' ? '底注' : '每分'}</span>
             <Coins value={hall.stake} size={17} />
             <span className="muted" style={{ marginLeft: 'auto' }}>{info.seats} 人一桌 · 空位可由机器人补</span>
           </div>
 
           <div className="seg">
-            {game === 'mahjong'
+            {game !== 'd2y'
               ? MJ_LEVELS.map((value) => (
                 <button key={value} type="button" className={mjLevel === value ? 'on' : ''} onClick={() => { sfx.select(); setMjLevel(value); save('daieryou.mjLevel', value) }}>{MJ_LEVEL_NAME[value]}</button>
               ))
@@ -288,10 +297,10 @@ export function Lobby() {
                 <button key={value} type="button" className={botLevel === value ? 'on' : ''} onClick={() => { sfx.select(); setBotLevel(value); save('daieryou.botLevel', value) }}>{BOT_LEVEL_NAME[value].split('·')[0]}</button>
               ))}
           </div>
-          <p className="seg-tip">机器人水平 · {game === 'mahjong' ? MJ_LEVEL_DESC[mjLevel].split('：')[1] : BOT_TIP[botLevel].split('：')[1]}</p>
+          <p className="seg-tip">机器人水平 · {game === 'mahjong' ? MJ_LEVEL_DESC[mjLevel].split('：')[1] : game === 'liuhu' ? LH_LEVEL_DESC[mjLevel].split('：')[1] : BOT_TIP[botLevel].split('：')[1]}</p>
 
           <div className="play-duo">
-            <Button kind="gold" size="lg" onClick={playWithBots}>{game === 'mahjong' ? '人机试炼' : '人机对战'}</Button>
+            <Button kind="gold" size="lg" onClick={playWithBots}>{game !== 'd2y' ? '人机试炼' : '人机对战'}</Button>
             <Button kind="jade" size="lg" onClick={quickMatch}>快速匹配</Button>
           </div>
           <div className="play-friends">

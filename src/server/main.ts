@@ -137,6 +137,7 @@ server.listen(PORT, () => {
 function shutdown(): void {
   app.rooms.shutdown()
   app.mahjong.shutdown()
+  app.liuhu.shutdown()
   clearInterval(heartbeat)
   wss.clients.forEach((socket) => socket.terminate())
   server.close(() => process.exit(0))

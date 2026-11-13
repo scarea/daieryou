@@ -1,0 +1,222 @@
+/* ============================================================
+   常宁六胡抢：字牌、立体牌桌、手牌与结算
+   ============================================================ */
+
+/* ------------------------------ 字牌 ------------------------------ */
+.zi {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: var(--zw);
+  height: var(--zh);
+  border-radius: calc(var(--zw) * 0.14);
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 36%),
+    linear-gradient(180deg, #fffdf4 0%, #f6eeda 60%, #e6d9b8 100%);
+  box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 2px 0 #cdbb8c, 0 3px 0 #8d7a4a, 1px 6px 8px rgba(0, 0, 0, 0.5);
+  color: #17130d;
+  font-family: var(--font-kai);
+  font-weight: 900;
+  line-height: 1;
+  user-select: none;
+}
+.zi.red { color: #c4161c; }
+.zi b, .zi i { position: absolute; left: 0; right: 0; text-align: center; font-style: normal; font-size: var(--zf); }
+.zi b { top: calc(var(--zw) * 0.1); }
+.zi i { bottom: calc(var(--zw) * 0.1); transform: rotate(180deg); }
+.zi.s { --zw: 30px; --zh: 40px; --zf: 23px; }
+.zi.m { --zw: 40px; --zh: 54px; --zf: 31px; }
+.zi.h { --zw: 62px; --zh: 104px; --zf: 41px; }
+.zi.xl { --zw: 84px; --zh: 132px; --zf: 56px; }
+.zi.s i, .zi.m i { display: none; }
+.zi.s b, .zi.m b { top: 50%; transform: translateY(-50%); }
+.zi-back {
+  background: repeating-linear-gradient(45deg, #8f1d22 0 5px, #a3272c 5px 10px);
+  box-shadow: inset 0 0 0 2px #e8c36a, inset 0 0 0 4px #7a1418, 0 2px 0 #5c0f12, 1px 5px 7px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------ 牌桌 ------------------------------ */
+.lh-scene { --mid: 302px; background: radial-gradient(ellipse at 50% 30%, #4a1418 0%, #24080b 55%, #0d0304 100%); }
+.lh-cam { position: absolute; inset: 0; overflow: hidden; perspective: 1500px; perspective-origin: 50% 10%; pointer-events: none; }
+.lh-plane { position: absolute; inset: 0; transform-origin: 50% 60%; transform: rotateX(16deg); transform-style: preserve-3d; }
+.lh-felt {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 64px;
+  bottom: -40px;
+  border-radius: 110px 110px 40px 40px;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(255, 255, 220, 0.12), transparent 55%),
+    radial-gradient(ellipse at 50% 40%, #1f8a63 0%, #0f6146 55%, #06382a 100%);
+  box-shadow: inset 0 0 0 9px #5a2a10, inset 0 0 0 12px #d8a94a, inset 0 0 0 14px #5a2a10, inset 0 0 90px rgba(0, 0, 0, 0.55), 0 30px 50px rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+}
+.lh-felt i { margin-top: -150px; font-style: normal; font-family: var(--font-brush); font-size: 60px; letter-spacing: 16px; color: rgba(255, 255, 255, 0.055); }
+
+.lh-deck { position: absolute; left: 500px; top: calc(var(--mid) - 66px); width: 84px; text-align: center; }
+.lh-deck .zi { transform: translateY(calc(var(--layers) * -1.5px)); box-shadow: inset 0 0 0 2px #e8c36a, inset 0 0 0 4px #7a1418, 0 calc(var(--layers) * 1.5px) 0 #d9c79a, 0 calc(var(--layers) * 1.5px + 2px) 0 #8d7a4a, 3px calc(var(--layers) * 1.5px + 10px) 14px rgba(0, 0, 0, 0.6); }
+.lh-deck.empty .zi { opacity: 0.25; }
+.lh-deck > b { position: absolute; left: 0; right: 0; top: 38px; font-size: 34px; color: #fff3c4; text-shadow: 0 2px 4px #000; }
+.lh-deck small { position: absolute; left: 0; right: 0; top: 78px; font-size: 14px; letter-spacing: 2px; color: rgba(255, 240, 200, 0.85); }
+
+.lh-shown { position: absolute; left: 640px; top: calc(var(--mid) - 66px); display: flex; align-items: center; gap: 14px; transform-origin: 50% 100%; transform: rotateX(-16deg) translateZ(34px); animation: lh-shown-in 0.36s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+.lh-shown .zi { box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 0 0 3px var(--gold-1), 0 0 30px 8px rgba(255, 210, 110, 0.75), 0 4px 0 #8d7a4a, 4px 18px 22px rgba(0, 0, 0, 0.6); }
+.lh-shown em { font-style: normal; padding: 5px 14px; border-radius: 999px; font-size: 17px; letter-spacing: 2px; white-space: nowrap; color: #fff3c4; background: rgba(0, 0, 0, 0.62); box-shadow: inset 0 0 0 1px rgba(219, 167, 67, 0.6); }
+.lh-shown.discard em { color: #ffd0d0; box-shadow: inset 0 0 0 1px rgba(255, 120, 120, 0.7); }
+.lh-shown.from-bottom { --from: translate(0, 220px); }
+.lh-shown.from-right { --from: translate(330px, 0); }
+.lh-shown.from-top { --from: translate(0, -200px); }
+.lh-shown.from-left { --from: translate(-330px, 0); }
+.lh-shown.draw { --from: translate(-140px, 0); }
+@keyframes lh-shown-in { from { opacity: 0; transform: rotateX(-16deg) translateZ(34px) var(--from, translate(0, 0)) scale(0.6); } }
+
+.lh-zone { position: absolute; display: flex; gap: 6px; }
+.lh-zone-top { left: 384px; top: 80px; align-items: flex-start; gap: 16px; }
+.lh-zone-left { left: 34px; top: 214px; flex-direction: column; width: 236px; }
+.lh-zone-right { right: 34px; top: 214px; flex-direction: column; align-items: flex-end; width: 236px; }
+.lh-fan { display: flex; flex-wrap: wrap; min-height: 40px; max-width: 236px; }
+.lh-fan .zi { margin-left: -21px; }
+.lh-fan .zi:first-child { margin-left: 0; }
+.lh-fan.open .zi { margin-left: -13px; }
+.lh-fan.open .zi:first-child { margin-left: 0; }
+.lh-melds { display: flex; gap: 5px; min-height: 92px; align-items: flex-start; }
+.lh-zone-top .lh-melds { min-width: 120px; }
+.lh-zone-right .lh-melds, .lh-zone-right .lh-pile, .lh-zone-right .lh-fan { justify-content: flex-end; }
+.lh-meld { position: relative; display: inline-flex; flex-direction: column; animation: lh-drop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.lh-meld .zi + .zi { margin-top: -15px; }
+.lh-meld em { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); min-width: 18px; padding: 1px 5px; border-radius: 9px; font-style: normal; font-size: 12px; line-height: 1.2; text-align: center; color: #4a1c02; background: linear-gradient(180deg, #fff3b8, #e0a93a); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); z-index: 2; }
+.lh-pile { display: flex; flex-wrap: wrap; gap: 2px; width: 232px; align-content: flex-start; margin-top: 8px; }
+.lh-zone-top .lh-pile { margin-top: 0; }
+.lh-pile .zi { animation: lh-drop 0.28s cubic-bezier(0.2, 1.4, 0.4, 1) both; filter: brightness(0.9); }
+.lh-pile-me { position: absolute; right: 22px; top: 486px; width: 98px; margin: 0; justify-content: flex-end; }
+@keyframes lh-drop { from { opacity: 0; transform: translateY(-24px) scale(1.5); } }
+
+/* ------------------------------ 头像 ------------------------------ */
+.lh-seat { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.lh-seat.active .avatar { box-shadow: 0 0 0 3px var(--gold-1), 0 0 26px 6px rgba(255, 210, 110, 0.85); animation: seat-turn 1.2s ease-in-out infinite; }
+.lh-seat-bottom .mj-player { left: 16px; top: 646px; }
+.lh-seat-top .mj-player { left: 150px; top: 80px; }
+.lh-seat-left .mj-player { left: 24px; top: 150px; }
+.lh-seat-right .mj-player { right: 24px; top: 150px; flex-direction: row-reverse; text-align: right; }
+.lh-seat-right .mj-player .mj-dealer { left: auto; right: -4px; }
+.lh-seat .mj-player-info b { max-width: 150px; }
+.lh-seat-bottom .mj-burst { left: 640px; top: 460px; }
+.lh-seat-top .mj-burst { left: 640px; top: 210px; }
+.lh-seat-left .mj-burst { left: 330px; top: 330px; }
+.lh-seat-right .mj-burst { left: 950px; top: 330px; }
+
+/* ------------------------------ 我的门子与手牌 ------------------------------ */
+.lh-hand { position: absolute; left: 190px; right: 122px; bottom: 8px; display: flex; justify-content: center; align-items: flex-end; gap: 18px; z-index: 12; pointer-events: none; }
+.lh-my-melds { display: flex; gap: 7px; align-items: flex-end; padding: 8px 10px 14px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); box-shadow: inset 0 0 0 1px rgba(219, 167, 67, 0.4); }
+.lh-my-melds .lh-meld .zi + .zi { margin-top: -22px; }
+.lh-my-melds .lh-meld.ti .zi { filter: sepia(0.25) brightness(0.92); }
+.lh-columns { display: flex; gap: 5px; align-items: flex-end; pointer-events: auto; }
+.lh-column { display: flex; flex-direction: column; }
+.lh-card { position: relative; display: block; border: 0; padding: 0; background: none; touch-action: none; transition: transform 0.12s; -webkit-tap-highlight-color: transparent; }
+.lh-card + .lh-card { margin-top: -60px; }
+.lh-hand.live .lh-card { cursor: pointer; }
+.lh-hand.live .lh-card:hover { transform: translateY(-6px); }
+.lh-card.selected, .lh-hand.live .lh-card.selected:hover { transform: translateY(-18px); z-index: 3; }
+.lh-card.selected .zi { box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 0 0 3px var(--gold-1), 0 0 22px 5px rgba(255, 210, 110, 0.8), 0 3px 0 #8d7a4a, 1px 10px 12px rgba(0, 0, 0, 0.55); }
+.lh-card.blocked .zi { filter: brightness(0.72); }
+.lh-card.best .zi { box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 0 0 2px #4ade80, 0 0 14px 3px rgba(74, 222, 128, 0.6), 0 3px 0 #8d7a4a, 1px 6px 8px rgba(0, 0, 0, 0.5); }
+.lh-tip { position: absolute; right: -3px; top: -7px; padding: 1px 5px; border-radius: 8px; font-size: 12px; line-height: 1.25; color: #fff; background: rgba(0, 0, 0, 0.78); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); z-index: 4; pointer-events: none; }
+.lh-tip.best { color: #052e16; background: linear-gradient(180deg, #86efac, #22c55e); }
+
+/* ------------------------------ 提示条、操作、吃法 ------------------------------ */
+.lh-status { position: absolute; left: 0; right: 0; top: 196px; display: flex; justify-content: center; align-items: center; gap: 12px; z-index: 6; pointer-events: none; font-size: 16px; }
+.lh-status > * { padding: 4px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); box-shadow: inset 0 0 0 1px rgba(219, 167, 67, 0.4); color: rgba(255, 240, 200, 0.9); white-space: nowrap; }
+.lh-status > b { color: #4a1c02; background: linear-gradient(180deg, #fff3b8, #e0a93a); letter-spacing: 1px; }
+.lh-waits { display: inline-flex; align-items: center; gap: 4px; color: #86efac; }
+.lh-waits .zi { --zw: 24px; --zh: 30px; --zf: 19px; box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 1px 0 #8d7a4a; }
+.lh-actions { left: 0; right: 0; top: 414px; justify-content: center; }
+.mj-act.chi { background: radial-gradient(circle at 35% 28%, #6ee7a8, #16a34a 55%, #14532d); }
+.lh-chi { position: absolute; left: 0; right: 0; top: 232px; z-index: 27; display: grid; justify-items: center; gap: 8px; animation: rise 0.2s ease both; }
+.lh-chi > b { padding: 3px 16px; border-radius: 999px; font-size: 16px; color: #fff3c4; background: rgba(0, 0, 0, 0.75); }
+.lh-chi > div { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 1000px; }
+.lh-chi button { display: flex; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; border: 1.5px solid rgba(219, 167, 67, 0.7); background: linear-gradient(180deg, rgba(60, 12, 16, 0.96), rgba(24, 4, 6, 0.97)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6); cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
+.lh-chi button:hover { transform: translateY(-4px); border-color: #fff3b8; }
+.lh-chi .lh-meld .zi + .zi { margin-top: -20px; }
+
+/* ------------------------------ 翻牌定庄 ------------------------------ */
+.lh-flip { position: absolute; inset: 0; z-index: 30; display: grid; place-content: center; justify-items: center; gap: 22px; background: radial-gradient(ellipse at 50% 45%, rgba(40, 8, 12, 0.7), rgba(0, 0, 0, 0.9)); }
+.lh-flip h2 { margin: 0; font-family: var(--font-brush); font-size: 62px; letter-spacing: 14px; }
+.lh-flip-seats { display: flex; gap: 54px; }
+.lh-flip-seat { display: grid; justify-items: center; gap: 10px; animation: rise 0.45s ease both; transition: transform 0.3s; }
+.lh-flip-seat > b { font-size: 16px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-flip-seat .zi { animation: lh-flip-card 0.6s ease both; animation-delay: inherit; }
+.lh-flip-seat.dealer { transform: scale(1.14); }
+.lh-flip-seat.dealer .zi { box-shadow: 0 0 0 3px var(--gold-1), 0 0 34px 10px rgba(255, 210, 110, 0.85), 0 4px 0 #8d7a4a; }
+.lh-flip p { margin: 0; font-size: 20px; letter-spacing: 3px; color: rgba(255, 240, 200, 0.9); }
+@keyframes lh-flip-card { from { transform: rotateY(90deg) scale(0.8); } }
+
+/* ------------------------------ 结算 ------------------------------ */
+.lh-result-groups { display: flex; justify-content: center; align-items: flex-end; gap: 14px; margin: 4px 0 12px; }
+.lh-result-group { display: grid; justify-items: center; gap: 4px; animation: rise 0.4s ease both; }
+.lh-result-group .lh-meld .zi + .zi { margin-top: -20px; }
+.lh-result-group small { font-size: 14px; color: rgba(255, 240, 200, 0.75); }
+.lh-result-group > b { font-size: 20px; color: rgba(255, 240, 200, 0.4); }
+.lh-result-group.scored > b { color: var(--gold-1); text-shadow: 0 0 10px rgba(255, 200, 90, 0.7); }
+.lh-result-top { display: flex; align-items: center; justify-content: center; gap: 30px; margin: 2px 0 8px; }
+.lh-result-top .lh-result-groups { margin: 0; }
+.lh-math { margin: 0; opacity: 0; transform: scale(0.8); transition: opacity 0.3s, transform 0.35s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.lh-math.on { opacity: 1; transform: none; }
+.lh-scene .mj-result-mask { background: radial-gradient(ellipse at 50% 40%, rgba(40, 8, 12, 0.95), rgba(0, 0, 0, 0.97)); }
+.lh-result .mj-result-title { font-size: 62px; margin: 0 0 6px; }
+.lh-result .mj-result-note { margin: 2px 0 8px; }
+.mode-phone .lh-result .mj-result-title { font-size: 56px; margin-bottom: 2px; }
+.lh-pao { margin-left: 8px; padding: 0 8px; border-radius: 999px; font-style: normal; font-size: 13px; color: #fff; background: #b91c1c; }
+.lh-rule-tiles { display: inline-flex; gap: 2px; vertical-align: middle; margin: 0 4px; }
+.lh-rule-tiles .zi { --zw: 24px; --zh: 30px; --zf: 19px; box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 1px 0 #8d7a4a; }
+.rules-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.rules-table th, .rules-table td { padding: 5px 10px; border-bottom: 1px solid rgba(219, 167, 67, 0.22); text-align: left; }
+.rules-table th { color: var(--gold-2); font-weight: 700; }
+.rules-table td:nth-child(n + 3), .rules-table th:nth-child(n + 3) { text-align: center; width: 64px; }
+
+/* ------------------------------ 大厅：三个游戏入口 ------------------------------ */
+.game-card { width: 216px; padding: 0 12px; gap: 10px; }
+.game-glyph { flex: none; }
+.game-text b { font-size: 24px; letter-spacing: 3px; }
+.game-text small { font-size: 12px; white-space: normal; line-height: 1.3; }
+.game-card.game-liuhu { background: linear-gradient(180deg, rgba(255, 214, 120, 0.1), transparent 45%), linear-gradient(135deg, #7a4a12 0%, #2e1a05 100%); }
+.game-liuhu .game-glyph { color: #c4161c; border-radius: 7px; background: linear-gradient(160deg, #fffdf4, #eadfc2); box-shadow: 0 0 0 2px rgba(20, 3, 5, 0.8), 0 3px 0 #8d7a4a, 0 8px 14px rgba(0, 0, 0, 0.5); }
+.game-card:nth-child(3) { animation-delay: 0.16s; }
+
+/* ------------------------------ 手机 ------------------------------ */
+.mode-phone .game-card { width: 216px; height: 88px; }
+.mode-phone .game-glyph { width: 50px; height: 50px; font-size: 32px; }
+.mode-phone .game-text small { font-size: 12.5px; }
+.mode-phone .lh-scene { --mid: 256px; }
+.mode-phone .lh-felt { top: 54px; }
+.mode-phone .zi.xl { --zw: 74px; --zh: 116px; --zf: 50px; }
+.mode-phone .lh-deck { left: 510px; top: calc(var(--mid) - 58px); width: 74px; }
+.mode-phone .lh-deck > b { top: 32px; }
+.mode-phone .lh-deck small { top: 70px; }
+.mode-phone .lh-shown { top: calc(var(--mid) - 58px); }
+.mode-phone .lh-shown em { font-style: normal; font-size: 19px; }
+.mode-phone .lh-zone-top { top: 62px; left: 500px; }
+.mode-phone .lh-zone-left, .mode-phone .lh-zone-right { top: 124px; }
+.mode-phone .lh-fan { min-height: 0; }
+.mode-phone .lh-fan:not(.open) .zi { --zh: 30px; }
+.mode-phone .lh-melds { min-height: 88px; }
+.mode-phone .lh-pile-me { top: 372px; }
+.mode-phone .lh-seat-bottom .mj-player { left: 12px; top: 528px; }
+.mode-phone .lh-seat-bottom .mj-player .avatar { width: 52px !important; height: 52px !important; font-size: 27px !important; }
+.mode-phone .lh-seat-top .mj-player { left: 292px; top: 60px; }
+.mode-phone .lh-seat-left .mj-player { left: 20px; top: 62px; }
+.mode-phone .lh-seat-right .mj-player { right: 20px; top: 62px; }
+.mode-phone .lh-seat-bottom .mj-burst { top: 360px; }
+.mode-phone .lh-seat-top .mj-burst { top: 170px; }
+.mode-phone .lh-seat-left .mj-burst { left: 400px; top: 250px; }
+.mode-phone .lh-seat-right .mj-burst { left: 880px; top: 250px; }
+.mode-phone .lh-hand { bottom: 6px; left: 180px; }
+.mode-phone .lh-status { top: 160px; font-size: 17px; }
+.mode-phone .lh-actions { top: 300px; right: 0; }
+.mode-phone .lh-actions .mj-act { width: 92px; height: 92px; font-size: 54px; }
+.mode-phone .lh-actions .mj-act.pass { width: 76px; height: 76px; font-size: 40px; }
+.mode-phone .lh-chi { top: 150px; }
+.mode-phone .lh-flip { gap: 14px; }
+.mode-phone .lh-flip h2 { font-size: 50px; }
+.mode-phone .lh-result-groups { margin-bottom: 6px; }

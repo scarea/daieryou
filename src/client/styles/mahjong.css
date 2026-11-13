@@ -655,3 +655,181 @@
 .mj-act { transition: transform 0.14s, filter 0.15s, box-shadow 0.15s; }
 .mj-act:hover { box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -5px 0 rgba(0, 0, 0, 0.3), 0 0 0 2.5px #fff, 0 12px 0 rgba(0, 0, 0, 0.4), 0 22px 34px rgba(0, 0, 0, 0.6), 0 0 34px rgba(255, 230, 160, 0.6); }
 .mj-result-hand .mj-tile, .mj-bird .mj-tile { --sx: 0px; --sy: 6px; }
+
+/* ============================================================
+   立体麻将桌（Table3D）：真 3D 盒子的牌、方桌、牌墙
+   ============================================================ */
+.mj-scene { --cam-x: 0deg; --cam-z: 0deg; --mj3-cy: 304px; --mj3-k: 0.9; }
+.mj3-cam { position: absolute; inset: 0; z-index: 3; pointer-events: none; perspective: 2300px; perspective-origin: 50% 10%; }
+.mj3-table {
+  position: absolute;
+  left: 240px;
+  top: calc(var(--mj3-cy) - 400px);
+  width: 800px;
+  height: 800px;
+  transform-style: preserve-3d;
+  transform: scale(var(--mj3-k)) rotateX(calc(46deg + var(--cam-x))) rotateZ(var(--cam-z));
+  transition: transform 0.25s ease-out;
+}
+.mj3-felt {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  border: 26px solid #4a2a0e;
+  background: radial-gradient(ellipse 70% 70% at 50% 46%, #22a57b 0%, #12775a 48%, #084433 100%);
+  box-shadow:
+    inset 0 0 0 2px var(--gold-3),
+    inset 0 0 0 5px rgba(4, 40, 30, 0.9),
+    inset 0 0 90px rgba(0, 0, 0, 0.55),
+    0 0 0 2px #d9a441,
+    0 0 0 4px #1a0c02;
+  background-clip: padding-box;
+  overflow: hidden;
+}
+.mj3-felt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.32;
+  mix-blend-mode: overlay;
+}
+.felt-felt-crimson .mj3-felt { background-image: radial-gradient(ellipse 70% 70% at 50% 46%, #c2303a 0%, #8a141d 48%, #4a060c 100%); }
+.felt-felt-navy .mj3-felt { background-image: radial-gradient(ellipse 70% 70% at 50% 46%, #2f6fd0 0%, #173f8a 48%, #0a1c45 100%); }
+.felt-felt-purple .mj3-felt { background-image: radial-gradient(ellipse 70% 70% at 50% 46%, #8a4fd0 0%, #53278f 48%, #24104a 100%); }
+/* 桌子的立面：桌沿往下的厚度 */
+.mj3-skirt { position: absolute; display: block; background: linear-gradient(180deg, #5a3210 0%, #2e1806 55%, #120902 100%); box-shadow: inset 0 3px 0 rgba(217, 164, 65, 0.8), inset 0 -30px 40px rgba(0, 0, 0, 0.6); }
+.mj3-skirt.s { left: 0; top: 100%; width: 100%; height: 84px; transform-origin: 50% 0; transform: rotateX(-90deg); }
+.mj3-skirt.e { left: 100%; top: 0; width: 84px; height: 100%; transform-origin: 0 50%; transform: rotateY(90deg); background: linear-gradient(90deg, #4a2a0e 0%, #241204 60%, #0c0601 100%); }
+.mj3-skirt.w { left: -84px; top: 0; width: 84px; height: 100%; transform-origin: 100% 50%; transform: rotateY(-90deg); background: linear-gradient(270deg, #4a2a0e 0%, #241204 60%, #0c0601 100%); }
+.mj3-table::after {
+  /* 桌子落在地上的影子 */
+  content: '';
+  position: absolute;
+  inset: -40px -60px -120px;
+  transform: translateZ(-86px);
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.75) 30%, rgba(0, 0, 0, 0) 70%);
+}
+
+.mj3-seat { position: absolute; left: 400px; top: 400px; width: 0; height: 0; transform-style: preserve-3d; }
+
+/* ------------------------------ 3D 牌 ------------------------------ */
+.t3 { position: absolute; left: 0; top: 0; width: 38px; height: 52px; transform-style: preserve-3d; --d: 22px; --ivory: #fbf5e2; --jade: #19a071; }
+.t3 .f, .mj3-console .f { position: absolute; display: block; }
+.t3.flat .top, .t3.down .top { inset: 0; transform: translateZ(var(--d)); border-radius: 5px; }
+.t3.flat .top {
+  background: linear-gradient(150deg, #ffffff 0%, #fbf5e2 45%, #eadfc2 100%);
+  box-shadow: inset 0 0 0 1px rgba(160, 130, 70, 0.45), inset 0 2px 2px rgba(255, 255, 255, 0.9), inset 0 -3px 4px rgba(150, 118, 56, 0.25);
+}
+.t3.flat .top img { position: absolute; left: 10%; top: 6%; width: 80%; height: 88%; object-fit: contain; }
+.t3.down .top {
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 244, 196, 0.5) 0 14%, rgba(255, 244, 196, 0) 15%),
+    repeating-linear-gradient(45deg, rgba(255, 244, 196, 0.16) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, rgba(255, 244, 196, 0.16) 0 1px, transparent 1px 6px),
+    linear-gradient(150deg, #2cc496 0%, #149068 50%, #0a5a3e 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 196, 0.55), inset 0 0 0 3px rgba(8, 70, 48, 0.5);
+}
+.t3.flat .s, .t3.down .s { left: 0; top: 100%; width: 100%; height: var(--d); transform-origin: 50% 0; transform: rotateX(90deg); filter: brightness(0.9); }
+.t3.flat .n, .t3.down .n { left: 0; top: calc(var(--d) * -1); width: 100%; height: var(--d); transform-origin: 50% 100%; transform: rotateX(-90deg); filter: brightness(0.8); }
+.t3.flat .e, .t3.down .e { left: 100%; top: 0; width: var(--d); height: 100%; transform-origin: 0 50%; transform: rotateY(-90deg); filter: brightness(0.74); }
+.t3.flat .w, .t3.down .w { left: calc(var(--d) * -1); top: 0; width: var(--d); height: 100%; transform-origin: 100% 50%; transform: rotateY(90deg); filter: brightness(0.74); }
+/* 侧面：正面朝上时，翠绿牌底在下、象牙在上；背面朝上时相反 */
+.t3.flat .s { background: linear-gradient(to bottom, var(--jade) 0 42%, var(--ivory) 42%); }
+.t3.flat .n { background: linear-gradient(to top, var(--jade) 0 42%, var(--ivory) 42%); }
+.t3.flat .e { background: linear-gradient(to right, var(--jade) 0 42%, var(--ivory) 42%); }
+.t3.flat .w { background: linear-gradient(to left, var(--jade) 0 42%, var(--ivory) 42%); }
+.t3.down .s { background: repeating-linear-gradient(to bottom, var(--ivory) 0 12.6px, var(--jade) 12.6px 22px); }
+.t3.down .n { background: repeating-linear-gradient(to top, var(--ivory) 0 12.6px, var(--jade) 12.6px 22px); }
+.t3.down .e { background: repeating-linear-gradient(to right, var(--ivory) 0 12.6px, var(--jade) 12.6px 22px); }
+.t3.down .w { background: repeating-linear-gradient(to left, var(--ivory) 0 12.6px, var(--jade) 12.6px 22px); }
+/* 贴着桌面的一圈影子 */
+.t3::before { content: ''; position: absolute; inset: -4px -5px -9px; background: radial-gradient(ellipse at 50% 55%, rgba(0, 0, 0, 0.5) 40%, rgba(0, 0, 0, 0) 74%); transform: translate(var(--sx), 0); }
+
+/* 立着的牌：占地 38×22，高 52；正面朝向这一家（+y） */
+.t3.stand { height: 22px; }
+.t3.stand .cap { inset: 0; transform: translateZ(52px); background: linear-gradient(to bottom, var(--jade) 0 42%, var(--ivory) 42%); border-radius: 3px; }
+.t3.stand .s { left: 0; top: 100%; width: 100%; height: 52px; transform-origin: 50% 0; transform: rotateX(90deg); background: linear-gradient(180deg, #eadfc2, #fbf5e2); border-radius: 4px; }
+.t3.stand .n {
+  left: 0; top: -52px; width: 100%; height: 52px; transform-origin: 50% 100%; transform: rotateX(-90deg); border-radius: 4px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 244, 196, 0.5) 0 14%, rgba(255, 244, 196, 0) 15%),
+    repeating-linear-gradient(45deg, rgba(255, 244, 196, 0.16) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, rgba(255, 244, 196, 0.16) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, #2cc496 0%, #149068 50%, #0a5a3e 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 196, 0.5);
+}
+.t3.stand .e { left: 100%; top: 0; width: 52px; height: 100%; transform-origin: 0 50%; transform: rotateY(-90deg); background: linear-gradient(to bottom, var(--jade) 0 42%, var(--ivory) 42%); filter: brightness(0.8); }
+.t3.stand .w { left: -52px; top: 0; width: 52px; height: 100%; transform-origin: 100% 50%; transform: rotateY(90deg); background: linear-gradient(to bottom, var(--jade) 0 42%, var(--ivory) 42%); filter: brightness(0.8); }
+.t3.stand::before { inset: -3px -4px -12px; }
+
+/* 进场与高亮 */
+.t3.river { animation: t3-drop 0.3s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+@keyframes t3-drop { from { translate: 0 70px 150px; opacity: 0; } }
+.t3.wall, .t3.stand { animation: t3-rise 0.4s ease both; }
+@keyframes t3-rise { from { translate: 0 0 60px; opacity: 0; } }
+.t3.reveal { animation: t3-reveal 0.45s ease both; }
+@keyframes t3-reveal { from { translate: 0 20px 40px; opacity: 0; } }
+.t3.meld { animation: t3-drop 0.32s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.t3.river.last .top { box-shadow: inset 0 0 0 2px #fff6d2, 0 0 0 2px #ff5a5f, 0 0 22px 6px rgba(255, 110, 100, 0.9); }
+.t3.river.last::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  background: #ff5a5f;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  transform: translateZ(64px) rotateX(-60deg);
+  filter: drop-shadow(0 0 6px rgba(255, 90, 95, 0.95));
+  animation: t3-bob 0.9s ease-in-out infinite;
+}
+@keyframes t3-bob { 50% { transform: translateZ(76px) rotateX(-60deg); } }
+
+/* ------------------------------ 桌心 ------------------------------ */
+.mj3-console { position: absolute; left: 330px; top: 344px; width: 140px; height: 112px; transform-style: preserve-3d; --d: 14px; }
+.mj3-console .top {
+  inset: 0;
+  transform: translateZ(var(--d));
+  border-radius: 14px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  line-height: 1;
+  background: linear-gradient(180deg, #0b2a20, #03120d);
+  box-shadow: inset 0 0 0 2px rgba(248, 220, 130, 0.6), inset 0 0 24px rgba(0, 0, 0, 0.7);
+}
+.mj3-console .top small { font-size: 12px; letter-spacing: 4px; color: rgba(255, 236, 190, 0.55); }
+.mj3-console .top b { margin-top: 3px; font-size: 40px; color: var(--gold-2); }
+.mj3-console .top b.low { color: #ff8a80; animation: pulse 1s infinite; }
+.mj3-console .s { left: 0; top: 100%; width: 100%; height: var(--d); transform-origin: 50% 0; transform: rotateX(90deg); background: #1a0c02; }
+.mj3-console .e { left: 100%; top: 0; width: var(--d); height: 100%; transform-origin: 0 50%; transform: rotateY(-90deg); background: #120802; }
+.mj3-console .w { left: calc(var(--d) * -1); top: 0; width: var(--d); height: 100%; transform-origin: 100% 50%; transform: rotateY(90deg); background: #120802; }
+.lamp { position: absolute; display: grid; place-items: center; font-family: var(--font-kai); font-size: 12px; font-weight: 900; color: #fff3d0; border-radius: 4px; background: rgba(255, 236, 190, 0.14); transition: all 0.25s; }
+.lamp-0 { left: 34px; right: 34px; bottom: 6px; height: 14px; }
+.lamp-2 { left: 34px; right: 34px; top: 6px; height: 14px; }
+.lamp-1 { right: 6px; top: 26px; bottom: 26px; width: 14px; }
+.lamp-3 { left: 6px; top: 26px; bottom: 26px; width: 14px; }
+.lamp.dealer { background: rgba(200, 32, 43, 0.75); }
+.lamp.on { background: linear-gradient(180deg, #fff3b8, #f6c94a); color: #4b1c02; box-shadow: 0 0 16px 4px rgba(255, 214, 110, 0.95); animation: lamp 1s ease-in-out infinite; }
+@keyframes lamp { 50% { box-shadow: 0 0 26px 8px rgba(255, 214, 110, 1); } }
+
+/* 头像等悬浮层的位置：配合新桌子 */
+.mj-seat-top .mj-player { left: 250px; top: 78px; }
+.mj-seat-left .mj-player { left: 30px; top: 250px; }
+.mj-seat-right .mj-player { right: 30px; top: 250px; }
+.mj-seat-bottom .mj-burst { left: 640px; top: 450px; }
+.mj-seat-top .mj-burst { left: 640px; top: 170px; }
+.mj-seat-left .mj-burst { left: 380px; top: 310px; }
+.mj-seat-right .mj-burst { left: 900px; top: 310px; }
+
+/* 手机 */
+.mode-phone .mj-scene { --mj3-cy: 238px; --mj3-k: 0.69; }
+.mode-phone .mj-seat-top .mj-player { left: 330px; top: 60px; }
+.mode-phone .mj-seat-left .mj-player { left: 40px; top: 190px; }
+.mode-phone .mj-seat-right .mj-player { right: 40px; top: 190px; }
+.mode-phone .mj-seat-bottom .mj-burst { top: 340px; }
+.mode-phone .mj-seat-top .mj-burst { top: 140px; }
+.mode-phone .mj-seat-left .mj-burst { left: 430px; top: 240px; }
+.mode-phone .mj-seat-right .mj-burst { left: 850px; top: 240px; }

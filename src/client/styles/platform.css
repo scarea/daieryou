@@ -200,7 +200,6 @@
 .mode-phone .table-hall b { font-size: 26px; }
 .mode-phone .table-top .btn-sm { height: 40px; }
 .mode-phone .mj-switch { height: 40px; font-size: 16px; }
-.mode-phone .mj-plane { transform: translateY(-70px) perspective(1500px) rotateX(24deg) scale(0.75); }
 .mode-phone .mj-hand { left: 50%; top: 478px; transform: translateX(-50%); gap: 16px; }
 .mode-phone .mj-hand-tile .mj-tile { --w: 68px; --d: 7px; }
 .mode-phone .mj-hand .mj-melds .mj-tile { --w: 46px; }
@@ -209,21 +208,14 @@
 .mode-phone .mj-ukeire { top: -28px; font-size: 15px; height: 22px; line-height: 22px; }
 .mode-phone .mj-seat-bottom .mj-player { left: 14px; top: 392px; }
 .mode-phone .mj-seat-bottom .mj-player .avatar { width: 54px !important; height: 54px !important; font-size: 28px !important; }
-.mode-phone .mj-seat-top .mj-player { left: 300px; top: 60px; }
-.mode-phone .mj-seat-left .mj-player { left: 16px; top: 120px; flex-direction: column; align-items: flex-start; gap: 6px; }
-.mode-phone .mj-seat-right .mj-player { right: 16px; top: 120px; flex-direction: column; align-items: flex-end; gap: 6px; }
 .mode-phone .mj-player-info b { font-size: 17px; }
 .mode-phone .mj-player-info small { font-size: 14px; }
-.mode-phone .mj-seat-bottom .mj-burst { top: 350px; }
-.mode-phone .mj-seat-top .mj-burst { top: 150px; }
-.mode-phone .mj-seat-left .mj-burst { left: 420px; top: 250px; }
-.mode-phone .mj-seat-right .mj-burst { left: 860px; top: 250px; }
 .mode-phone .mj-actions { right: 30px; top: 344px; gap: 16px; }
 .mode-phone .mj-act { width: 104px; height: 104px; font-size: 62px; }
 .mode-phone .mj-act.pass { width: 84px; height: 84px; font-size: 44px; }
 .mode-phone .mj-coach {
   left: 150px;
-  top: 436px;
+  top: 404px;
   width: 760px;
   max-height: 36px;
   height: 36px;
@@ -241,7 +233,7 @@
 .mode-phone .mj-coach p { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 6px; overflow: hidden; }
 .mode-phone .mj-coach em { font-size: 17px; }
 .mode-phone .mj-coach-tiles { margin: 0; flex-wrap: nowrap; }
-.mode-phone .mj-tenpai { left: 150px; top: 436px; font-size: 18px; }
+.mode-phone .mj-tenpai { left: 150px; top: 404px; font-size: 18px; }
 .mode-phone .mj-dice-stage { top: 76px; }
 .mode-phone .mj-dice-title { font-size: 50px; }
 .mode-phone .mj-dice-sub { margin: 0 0 16px; }
@@ -281,3 +273,76 @@
 .mode-tall .modal { width: 540px !important; }
 .mode-tall .recovery-code { font-size: 32px; letter-spacing: 3px; }
 .mode-tall .doors { display: none; }
+
+/* ============================================================
+   逮二游：透视牌桌（桌上的牌平躺、有厚度）与手机布局
+   ============================================================ */
+.p3-cam { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.p3-plane { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; transform-style: preserve-3d; }
+/* 桌沿加厚：沿着桌面向着镜头的方向多出一圈木边，看起来就是桌子的厚度 */
+.p3-plane .felt {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 190, 170, 0.45),
+    inset 0 -6px 14px rgba(0, 0, 0, 0.6),
+    0 0 0 2.5px var(--gold-3),
+    0 0 0 5px #2c0509,
+    0 0 0 6.5px rgba(219, 167, 67, 0.6),
+    0 14px 0 6px #4a070d,
+    0 26px 0 6px #2a0407,
+    0 34px 0 6px #120203,
+    0 70px 90px 10px rgba(0, 0, 0, 0.8);
+}
+.p3-plane .felt-inner { box-shadow: inset 0 0 0 2.5px var(--gold-3), inset 0 0 0 5px rgba(4, 40, 30, 0.9), inset 0 0 0 6px rgba(248, 220, 130, 0.4), inset 0 26px 70px rgba(0, 0, 0, 0.6), inset 0 -10px 40px rgba(0, 0, 0, 0.35); }
+.p3-plane .felt-inner::after { border-width: 2px; }
+.p3-plane .pub-label { font-size: 15px; letter-spacing: 2px; }
+.p3-plane .pub-label.current { font-size: 18px; }
+
+.card-layer { transform-style: preserve-3d; }
+.ent { left: -52px; top: -73px; }
+/* 平躺在桌上的牌：一摞纸的厚度 + 贴着桌面的影子 */
+.ent.flat .card-side { box-shadow: 0 1.5px 0 #efe5c8, 0 3px 0 #c9b98f, 0 4.5px 0 #8a7340, var(--card-sx, 0px) 14px 16px rgba(0, 0, 0, 0.55); }
+.ent.flat .card-back { box-shadow: 0 1.5px 0 #b01722, 0 3px 0 #7c0d16, 0 4.5px 0 #4a060c, var(--card-sx, 0px) 14px 16px rgba(0, 0, 0, 0.55); }
+.ent.flat.pub.current .card-side { box-shadow: 0 0 0 2.5px var(--gold-1), 0 0 34px 8px rgba(255, 210, 110, 0.85), 0 3px 0 #c9b98f, 0 16px 18px rgba(0, 0, 0, 0.5); }
+.ent.flat.slot.win .card-side { box-shadow: 0 0 0 2px var(--gold-2), 0 0 26px 4px rgba(255, 210, 110, 0.8), 0 3px 0 #c9b98f, 0 14px 16px rgba(0, 0, 0, 0.5); }
+.ent.flat.slot.lose .card-side { box-shadow: 0 0 0 2px #ff5a5f, 0 0 24px 3px rgba(255, 60, 60, 0.6), 0 3px 0 #c9b98f, 0 14px 16px rgba(0, 0, 0, 0.5); }
+/* 手牌竖在眼前：更亮，影子落在更远处 */
+.ent.hand .card-side { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 0 #efe5c8, 0 18px 26px rgba(0, 0, 0, 0.6); }
+.ent.hand.selected .card-side { box-shadow: 0 0 0 3px var(--gold-2), 0 0 30px 6px rgba(255, 210, 110, 0.9), 0 30px 34px rgba(0, 0, 0, 0.55); }
+.ent { transition: transform 0.6s cubic-bezier(0.22, 0.9, 0.3, 1), opacity 0.3s ease, filter 0.4s ease; }
+
+.seat-left, .seat-right { top: 196px; }
+
+/* ------------------------------ 手机 ------------------------------ */
+.mode-phone .table-scene .table-top { height: 56px; padding: 0 14px; }
+.mode-phone .rounds-track { top: 4px; gap: 6px; }
+.mode-phone .track-pip { width: 66px; height: 48px; }
+.mode-phone .track-pip b { font-size: 20px; }
+.mode-phone .prompt { top: 62px; font-size: 19px; padding: 5px 28px; }
+.mode-phone .prompt.hot { font-size: 22px; }
+.mode-phone .seat-left, .mode-phone .seat-right { top: 96px; }
+.mode-phone .seat-left { left: 6px; }
+.mode-phone .seat-right { right: 6px; }
+.mode-phone .seat-me { left: 16px; top: 452px; gap: 12px; }
+.mode-phone .seat-me .seat-avatar { width: 86px; height: 86px; }
+.mode-phone .seat-name { font-size: 19px; }
+.mode-phone .seat-score b { font-size: 24px; }
+.mode-phone .actions { right: 20px; bottom: 16px; width: 340px; gap: 10px; }
+.mode-phone .preview { height: 46px; font-size: 18px; }
+.mode-phone .preview b { font-size: 24px; }
+.mode-phone .chip { height: 40px; font-size: 17px; padding: 0 16px; }
+.mode-phone .actions .btn-lg { height: 72px; font-size: 28px; padding: 0 34px; }
+.mode-phone .emote-box { left: 300px; bottom: 16px; }
+.mode-phone .emote-box .icon-btn { width: 50px; height: 50px; font-size: 22px; }
+.mode-phone .emote-menu { width: 360px; }
+.mode-phone .emote-menu button { height: 46px; font-size: 16px; }
+.mode-phone .coach { top: 398px; left: 16px; font-size: 16px; }
+.mode-phone .round-banner { top: 200px; }
+.mode-phone .round-banner.final { top: 190px; }
+.mode-phone .waiting { top: 78px; gap: 10px; }
+.mode-phone .waiting-hall { font-size: 44px; }
+.mode-phone .waiting-code b { font-size: 38px; }
+.mode-phone .waiting-bots .chip { height: 42px; }
+.mode-phone .result { transform: scale(0.8); }
+.mode-phone .result-title { margin-bottom: 8px; }
+.mode-phone .spectate-tag { font-size: 17px; }
+.mode-phone .icon-btn { width: 46px; height: 46px; font-size: 21px; }

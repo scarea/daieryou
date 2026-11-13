@@ -7,10 +7,11 @@ import { Login } from './scenes/Login.tsx'
 import { Lobby } from './scenes/Lobby.tsx'
 import { Table } from './scenes/Table.tsx'
 import { Mahjong } from './mahjong/Mahjong.tsx'
+import { Liuhu } from './liuhu/Liuhu.tsx'
 import { useStore } from './store.ts'
 import { sfx } from './sound.ts'
 
-type SceneKey = 'boot' | 'login' | 'lobby' | 'table' | 'mahjong'
+type SceneKey = 'boot' | 'login' | 'lobby' | 'table' | 'mahjong' | 'liuhu'
 
 export function App() {
   const booting = useStore((state) => state.booting)
@@ -19,13 +20,14 @@ export function App() {
   const result = useStore((state) => state.result)
   const boot = useStore((state) => state.boot)
   const mj = useStore((state) => state.mj)
+  const lh = useStore((state) => state.lh)
 
   useEffect(() => {
     void boot()
   }, [boot])
 
   const view = result ?? room
-  const target: SceneKey = booting ? 'boot' : !user ? 'login' : mj ? 'mahjong' : view ? 'table' : 'lobby'
+  const target: SceneKey = booting ? 'boot' : !user ? 'login' : mj ? 'mahjong' : lh ? 'liuhu' : view ? 'table' : 'lobby'
 
   // 转场：殿门合上 → 换场景 → 殿门打开
   const [shown, setShown] = useState<SceneKey>(target)
@@ -34,6 +36,8 @@ export function App() {
   if (view) lastView.current = view
   const lastMj = useRef(mj)
   if (mj) lastMj.current = mj
+  const lastLh = useRef(lh)
+  if (lh) lastLh.current = lh
   useEffect(() => {
     if (target === shown) return
     if (shown === 'boot') {
@@ -55,13 +59,14 @@ export function App() {
 
   const tableView = view ?? (shown === 'table' ? lastView.current : null)
   return (
-    <Stage compact={shown !== 'table'} allowTall={shown === 'login' || shown === 'boot'}>
+    <Stage compact allowTall={shown === 'login' || shown === 'boot'}>
       <div className={`cosmetics ${user?.cardback ? `cb-${user.cardback}` : ''}`}>
-        <GoldDust count={shown === 'table' || shown === 'mahjong' ? 22 : 70} />
+        <GoldDust count={shown === 'table' || shown === 'mahjong' || shown === 'liuhu' ? 22 : 70} />
         {shown === 'login' && !user && <Login />}
         {shown === 'lobby' && user && <Lobby />}
         {shown === 'table' && user && tableView && <Table room={tableView} live={room} />}
         {shown === 'mahjong' && user && (mj ?? lastMj.current) && <Mahjong table={(mj ?? lastMj.current)!} />}
+        {shown === 'liuhu' && user && (lh ?? lastLh.current) && <Liuhu table={(lh ?? lastLh.current)!} />}
         <RecoveryModal />
       </div>
       <div className={`doors doors-${doors}`}>

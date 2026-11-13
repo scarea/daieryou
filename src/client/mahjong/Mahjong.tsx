@@ -12,6 +12,7 @@ import { useStore } from '../store.ts'
 import { sfx, voice } from '../sound.ts'
 import { MahjongRules } from './MahjongRules.tsx'
 import { ReviewModal } from './ReviewModal.tsx'
+import { Table3D } from './Table3D.tsx'
 import { Tile, preloadTiles } from './Tile.tsx'
 
 type Side = 'bottom' | 'right' | 'top' | 'left'
@@ -186,6 +187,9 @@ export function Mahjong({ table }: { table: MjView }) {
         // 投影落在光源的反方向
         scene.style.setProperty('--sx', `${((0.5 - x) * 14).toFixed(1)}px`)
         scene.style.setProperty('--sy', `${(6 + (0.5 - y) * 8).toFixed(1)}px`)
+        // 镜头随指针轻微转动，产生视差
+        scene.style.setProperty('--cam-x', `${((0.5 - y) * 3).toFixed(2)}deg`)
+        scene.style.setProperty('--cam-z', `${((x - 0.5) * 2.4).toFixed(2)}deg`)
       })
     }
     window.addEventListener('pointermove', move)
@@ -430,50 +434,8 @@ export function Mahjong({ table }: { table: MjView }) {
         </div>
       </header>
 
-      {/* ------------------------------ 牌桌平面（带透视）：桌面、牌墙余量、对手手牌、副露、弃牌 ------------------------------ */}
-      <div className="mj-plane">
-        <div className="mj-felt"><div className="mj-felt-inner"><i className="mj-spot" /></div></div>
-
-        {table.phase !== 'dice' && table.phase !== 'waiting' && (
-          <div className="mj-center">
-            <div className="mj-wall">
-              <small>余牌</small>
-              <b className={`num ${table.wallCount <= 12 ? 'low' : ''}`}>{table.wallCount}</b>
-            </div>
-            {table.seats.map((seat) => {
-              const active = table.phase === 'claim' ? table.claimSeat === seat.seat : table.phase === 'play' && table.turn === seat.seat
-              return (
-                <div key={seat.seat} className={`mj-compass mj-compass-${SIDES[seat.seat]} ${active ? 'active' : ''}`}>
-                  {table.dealer === seat.seat && <i>庄</i>}
-                  <b key={seat.total} className={`num pop ${seat.total > 0 ? 'up' : seat.total < 0 ? 'down' : ''}`}>{seat.total > 0 ? `+${seat.total}` : seat.total}</b>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {table.phase !== 'dice' && table.phase !== 'waiting' && table.seats.map((seat) => {
-          const side = SIDES[seat.seat]
-          return (
-            <div key={seat.seat} className={`mj-seat mj-seat-${side}`}>
-              {side !== 'bottom' && (
-                <div className={`mj-opp-hand ${seat.hand ? 'shown' : ''}`}>
-                  {seat.hand
-                    ? sortTiles(seat.hand).map((tile) => <Tile key={tile} kind={kindOf(tile)} className="xs" />)
-                    : Array.from({ length: seat.handCount }, (_, index) => (side === 'top' ? <Tile key={index} kind={-1} className="xs stand" /> : <span key={index} className="mj-slab" />))}
-                </div>
-              )}
-              {side !== 'bottom' && <Melds melds={seat.melds} size="xs" />}
-              <div className="mj-river">
-                {seat.discards.map((tile, index) => {
-                  const isLast = lastTile?.seat === seat.seat && index === seat.discards.length - 1
-                  return <Tile key={tile} kind={kindOf(tile)} className={`sm ${isLast ? 'last' : ''}`} />
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* ------------------------------ 立体牌桌：桌面、牌墙、弃牌、对手手牌与副露 ------------------------------ */}
+      <Table3D table={table} />
 
       {/* ------------------------------ 悬浮层（不带透视）：头像与碰杠胡的大字 ------------------------------ */}
       {table.phase !== 'dice' && table.phase !== 'waiting' && table.seats.map((seat) => {

@@ -3,6 +3,7 @@ import type { GameView, RoundResult } from './engine.ts'
 import type { GameId } from './games.ts'
 import type { MjOptions } from './mahjong/game.ts'
 import type { MjAction, MjLevel, MjView } from './mahjong/view.ts'
+import type { LhAction, LhLevel, LhView } from './liuhu/view.ts'
 
 export interface UserProfile {
   id: string
@@ -118,7 +119,7 @@ export interface MatchRecord {
   honorDelta: number
   players: { nickname: string; avatar: number; total: number; isBot: boolean; me: boolean }[]
   rounds: { round: number; deltas: number[]; hands: string[] }[]
-  /** 游戏类型：空为逮二游，mahjong 为红中麻将 */
+  /** 游戏类型：空为逮二游，mahjong 为红中麻将，liuhu 为六胡抢 */
   game?: string
   summary?: string
 }
@@ -214,6 +215,13 @@ export type ClientOp =
   | { op: 'mj:act'; action: MjAction }
   | { op: 'mj:next' }
   | { op: 'mj:leave' }
+  | { op: 'lh:start'; hallId: string; level: LhLevel }
+  | { op: 'lh:match'; hallId: string }
+  | { op: 'lh:create'; hallId: string; isPrivate: boolean; level: LhLevel }
+  | { op: 'lh:begin' }
+  | { op: 'lh:act'; action: LhAction }
+  | { op: 'lh:next' }
+  | { op: 'lh:leave' }
   | { op: 'ping' }
 
 export type ClientMessage = ClientOp & { id: number }
@@ -225,6 +233,7 @@ export type ServerEvent =
   | { ev: 'lobby'; lobby: LobbyState }
   | { ev: 'me'; user: UserProfile }
   | { ev: 'mj'; table: MjView | null }
+  | { ev: 'lh'; table: LhView | null }
   | { ev: 'emote'; seat: number; key: string }
   | { ev: 'notice'; text: string }
   | { ev: 'kicked'; reason: string }
