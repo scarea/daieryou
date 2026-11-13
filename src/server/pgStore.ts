@@ -2,7 +2,7 @@
 import pg from 'pg'
 import type { LeaderboardRow, LedgerItem, MatchRecord } from '../shared/protocol.ts'
 import {
-  BoardKind, MatchInsert, MatchPlayerInsert, MatchRow, NewUser, Store, StoreStats, USER_EXTRA_COLUMNS, UserRow, toMatchRecord,
+  BoardKind, MatchDetail, MatchInsert, MatchPlayerInsert, MatchRow, NewUser, Store, StoreStats, USER_EXTRA_COLUMNS, UserRow, toMatchRecord,
 } from './store.ts'
 
 // bigint（金币、毫秒时间戳）按数字返回
@@ -231,6 +231,16 @@ export class PgStore implements Store {
       [userId, limit],
     )
     return (rows as MatchRow[]).map((row) => toMatchRecord(row, userId))
+  }
+
+  async getMatchDetail(matchId: string, userId: string): Promise<MatchDetail | undefined> {
+    const { rows } = await this.q.query(
+      `select m.detail from royale_matches m join royale_match_players p on p.match_id = m.id
+       where m.id = $1 and p.user_id = $2 and ${FRESH}`,
+      [matchId, userId],
+    )
+    const detail = rows[0]?.detail
+    return typeof detail === 'string' ? JSON.parse(detail) : detail
   }
 
   async leaderboard(kind: BoardKind, limit = 30): Promise<LeaderboardRow[]> {

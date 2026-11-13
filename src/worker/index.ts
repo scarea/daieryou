@@ -13,6 +13,7 @@ interface Env {
   BOT_SIM_SCALE?: string
   PASSWORD_HASH_ITERATIONS?: string
   ADMIN_KEY?: string
+  DATA_KEY?: string
 }
 
 const json = (status: number, body: unknown) =>
@@ -49,7 +50,7 @@ export class GameServer extends DurableObject<Env> {
       const store = PgStore.create(connectionString, !hyperdriveUrl)
       await store.migrate()
       this.store = store
-      this.app = createApp(store, { hashIterations: Number(this.env.PASSWORD_HASH_ITERATIONS) || 20000, adminKey: this.env.ADMIN_KEY || '' })
+      this.app = createApp(store, { hashIterations: Number(this.env.PASSWORD_HASH_ITERATIONS) || 20000, adminKey: this.env.ADMIN_KEY || '', dataKey: this.env.DATA_KEY || '' })
       const restored = await this.app.rooms.restore().catch(() => 0)
       if (restored > 0) console.log(`已恢复 ${restored} 桌未打完的对局`)
       this.lastError = ''

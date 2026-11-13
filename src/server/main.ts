@@ -1,7 +1,8 @@
 // Node 入口：HTTP（接口 + 静态资源）与 WebSocket，数据存本地 SQLite。
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, normalize, resolve } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { WebSocketServer, WebSocket } from 'ws'
 import { AppError } from './accounts.ts'
 import { CORS_HEADERS, createApp } from './app.ts'
@@ -12,7 +13,18 @@ const DB_PATH = process.env.DB_PATH || resolve('data/daieryou.db')
 const DIST_DIR = resolve('dist')
 
 const store = new SqliteStore(DB_PATH)
-const app = createApp(store, { adminKey: process.env.ADMIN_KEY || '' })
+/** 加密用户 API Key 的密钥：优先用环境变量，否则在数据目录里生成并保存一份 */
+function loadDataKey(): string {
+  if (process.env.DATA_KEY) return process.env.DATA_KEY
+  const file = join(dirname(DB_PATH), '.data-key')
+  if (existsSync(file)) return readFileSync(file, 'utf8').trim()
+  const key = randomBytes(32).toString('hex')
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, key, { mode: 0o600 })
+  return key
+}
+
+const app = createApp(store, { adminKey: process.env.ADMIN_KEY || '', dataKey: loadDataKey() })
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -124,6 +136,7 @@ server.listen(PORT, () => {
 
 function shutdown(): void {
   app.rooms.shutdown()
+  app.mahjong.shutdown()
   clearInterval(heartbeat)
   wss.clients.forEach((socket) => socket.terminate())
   server.close(() => process.exit(0))

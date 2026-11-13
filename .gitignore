@@ -8,3 +8,5 @@ data/*.db*
 .dev.vars
 .env*
 .admin-key
+data/.data-key
+.data-key

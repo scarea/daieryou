@@ -113,6 +113,47 @@ function startMusic(): void {
   void musicEl.play().catch(() => {})
 }
 
+// ------------------------------ 语音报牌 ------------------------------
+const VOICE_KEY = 'daieryou.voice'
+let voiceOn = true
+try {
+  voiceOn = localStorage.getItem(VOICE_KEY) !== '0'
+} catch {
+  voiceOn = true
+}
+
+export const voice = {
+  isOn: () => voiceOn,
+  setOn(value: boolean) {
+    voiceOn = value
+    try {
+      localStorage.setItem(VOICE_KEY, value ? '1' : '0')
+    } catch {
+      // ignore
+    }
+    if (!value && 'speechSynthesis' in window) window.speechSynthesis.cancel()
+  },
+  /** 用浏览器自带的中文语音报牌（"三万""碰""自摸"）；没有语音引擎时静默 */
+  say(text: string, options: { rate?: number; pitch?: number; urgent?: boolean } = {}) {
+    if (!voiceOn || muted || !('speechSynthesis' in window)) return
+    try {
+      const synth = window.speechSynthesis
+      // 报牌很密：新的一句顶掉还没念完的旧句
+      if (options.urgent || synth.pending) synth.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'zh-CN'
+      utterance.rate = options.rate ?? 1.25
+      utterance.pitch = options.pitch ?? 1
+      utterance.volume = 0.9
+      const zh = synth.getVoices().find((item) => item.lang.replace('_', '-').toLowerCase().startsWith('zh-cn'))
+      if (zh) utterance.voice = zh
+      synth.speak(utterance)
+    } catch {
+      // ignore
+    }
+  },
+}
+
 export const music = {
   isOn: () => musicOn,
   setOn(value: boolean) {
@@ -179,5 +220,43 @@ export const sfx = {
   count: () => tone(2400 + Math.random() * 1200, 0.05, { type: 'triangle', gain: 0.035 }),
   /** 升爵 / 大奖 */
   fanfare: () => { [0, 2, 4, 5, 7, 5, 7].forEach((note, i) => pluck(PENTA[note], { gain: 0.18, delay: i * 0.1, duration: 0.7 })); tone(98, 1.6, { type: 'sine', gain: 0.28, delay: 0.7 }) },
+  // ------------------------------ 麻将 ------------------------------
+  /** 牌拍在桌上的"啪" */
+  tileDiscard: () => { noise(0.045, { gain: 0.5, freq: 2600, q: 1.6 }); tone(1750, 0.04, { type: 'triangle', gain: 0.16, slideTo: 900 }); tone(190, 0.09, { type: 'sine', gain: 0.22, slideTo: 90 }) },
+  /** 摸牌：轻轻一磕 */
+  tileDraw: () => { noise(0.03, { gain: 0.22, freq: 3400, q: 2 }); tone(2300, 0.03, { type: 'triangle', gain: 0.07 }) },
+  /** 选中手牌 */
+  tilePick: () => { noise(0.02, { gain: 0.14, freq: 4200, q: 2.5 }); tone(1500, 0.025, { type: 'triangle', gain: 0.05 }) },
+  /** 洗牌 / 码牌：一阵哗啦声 */
+  tileShuffle: () => {
+    for (let i = 0; i < 26; i += 1) {
+      const delay = i * 0.045 + Math.random() * 0.03
+      noise(0.03 + Math.random() * 0.03, { gain: 0.16 + Math.random() * 0.18, freq: 1800 + Math.random() * 2600, q: 1.5, delay })
+      if (i % 3 === 0) tone(1400 + Math.random() * 900, 0.03, { type: 'triangle', gain: 0.06, delay })
+    }
+  },
+  /** 碰 / 杠：几张牌一起亮出来 */
+  tileMeld: (count = 3) => {
+    for (let i = 0; i < count; i += 1) {
+      noise(0.04, { gain: 0.4, freq: 2400, q: 1.6, delay: i * 0.055 })
+      tone(1600 - i * 120, 0.04, { type: 'triangle', gain: 0.12, delay: i * 0.055, slideTo: 800 })
+    }
+    tone(120, 0.22, { type: 'sine', gain: 0.32, delay: count * 0.055, slideTo: 60 })
+  },
+  /** 骰子在碗里滚 */
+  diceRoll: () => {
+    for (let i = 0; i < 9; i += 1) {
+      const delay = i * 0.07 * (1 + i * 0.06)
+      noise(0.03, { gain: 0.3 - i * 0.02, freq: 3000 + Math.random() * 1500, q: 2.2, delay })
+      tone(900 + Math.random() * 700, 0.03, { type: 'square', gain: 0.03, delay })
+    }
+  },
+  /** 胡牌：推倒手牌 + 锣 */
+  mahjongWin: () => {
+    for (let i = 0; i < 8; i += 1) noise(0.04, { gain: 0.34, freq: 2200 + i * 90, q: 1.4, delay: i * 0.03 })
+    ;[0, 2, 4, 5, 7].forEach((note, i) => pluck(PENTA[note], { gain: 0.2, delay: 0.3 + i * 0.1 }))
+    tone(196, 2, { type: 'sine', gain: 0.28, delay: 0.7 })
+    tone(98, 2.2, { type: 'sine', gain: 0.24, delay: 0.7 })
+  },
   reward: () => { [0, 2, 4, 7].forEach((note, i) => tone(PENTA[note], 0.3, { type: 'triangle', gain: 0.14, delay: i * 0.07 })); sfx.coins() },
 }

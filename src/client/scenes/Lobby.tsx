@@ -5,10 +5,13 @@ import { BOT_LEVEL_NAME, BotLevel } from '../../shared/protocol.ts'
 import { Avatar, Button, Coins, MusicToggle, SoundToggle, TitleBadge } from '../components/ui.tsx'
 import { AdminModal, FriendsModal, GrowthModal, ShopModal, Tutorial, tutorialSeen } from '../components/features.tsx'
 import { LeaderboardModal, ProfileModal, RecordsModal, RulesModal, SigninModal } from '../components/panels.tsx'
+import { DEFAULT_OPTIONS, MjOptions } from '../../shared/mahjong/game.ts'
+import { MJ_LEVELS, MJ_LEVEL_DESC, MJ_LEVEL_NAME, MjLevel } from '../../shared/mahjong/view.ts'
+import { MahjongRules } from '../mahjong/MahjongRules.tsx'
 import { useStore } from '../store.ts'
 import { sfx } from '../sound.ts'
 
-type ModalKey = 'signin' | 'rank' | 'records' | 'rules' | 'profile' | 'shop' | 'growth' | 'friends' | 'admin' | 'tutorial' | null
+type ModalKey = 'mjrules' | 'signin' | 'rank' | 'records' | 'rules' | 'profile' | 'shop' | 'growth' | 'friends' | 'admin' | 'tutorial' | null
 
 const HALL_GLYPH: Record<string, string> = { qingyun: '云', liujin: '金', longfeng: '凤', lingxiao: '霄' }
 const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard', 'peek']
@@ -38,6 +41,28 @@ export function Lobby() {
     return saved && BOT_LEVELS.includes(saved) ? saved : 'normal'
   })
   const [isPrivate, setIsPrivate] = useState(false)
+  const [game, setGame] = useState<'poker' | 'mahjong'>(() => (localStorage.getItem('daieryou.game') === 'mahjong' ? 'mahjong' : 'poker'))
+  const [mjLevel, setMjLevel] = useState<MjLevel>(() => {
+    const saved = localStorage.getItem('daieryou.mjLevel') as MjLevel | null
+    return saved && MJ_LEVELS.includes(saved) ? saved : 'normal'
+  })
+  const [mjOptions, setMjOptions] = useState<MjOptions>(() => {
+    try {
+      return { ...DEFAULT_OPTIONS, ...JSON.parse(localStorage.getItem('daieryou.mjOptions') || '{}') }
+    } catch {
+      return DEFAULT_OPTIONS
+    }
+  })
+  const pickGame = (value: 'poker' | 'mahjong') => {
+    sfx.select()
+    setGame(value)
+    localStorage.setItem('daieryou.game', value)
+  }
+  const setOption = (key: keyof MjOptions, value: boolean) => {
+    const next = { ...mjOptions, [key]: value }
+    setMjOptions(next)
+    localStorage.setItem('daieryou.mjOptions', JSON.stringify(next))
+  }
   const [roomCode, setRoomCode] = useState('')
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length))
 
@@ -174,10 +199,40 @@ export function Lobby() {
       </div>
 
       {/* ------------------------------ 开局面板 ------------------------------ */}
-      <aside className="panel play-panel">
+      <aside className="panel play-panel with-switch">
         <div className="panel-title gold-text">{hall.name} · 开局</div>
+        <div className="game-switch">
+          <button type="button" className={game === 'poker' ? 'on' : ''} onClick={() => pickGame('poker')}>逮二游</button>
+          <button type="button" className={game === 'mahjong' ? 'on' : ''} onClick={() => pickGame('mahjong')}>红中麻将</button>
+        </div>
         <div className="divider" />
-        <div className="play-body">
+        {game === 'mahjong' && (
+          <div className="play-body">
+            <div className="play-row">
+              <span className="muted">每分</span>
+              <Coins value={hall.stake} size={17} />
+              <span className="muted" style={{ marginLeft: 'auto' }}>人机试炼 · 1 人 + 3 机器人</span>
+            </div>
+            <div className="seg">
+              {MJ_LEVELS.map((value) => (
+                <button key={value} type="button" className={mjLevel === value ? 'on' : ''} onClick={() => { sfx.select(); setMjLevel(value); localStorage.setItem('daieryou.mjLevel', value) }}>
+                  {MJ_LEVEL_NAME[value]}
+                </button>
+              ))}
+            </div>
+            <p className="seg-tip">{MJ_LEVEL_DESC[mjLevel]}</p>
+            <Button kind="gold" size="lg" className="play-main" onClick={() => { if (guardEnter()) void send({ op: 'mj:start', hallId, level: mjLevel, options: mjOptions }) }}>
+              开始试炼
+            </Button>
+            <div className="mj-options">
+              <label className="check"><input type="checkbox" checked={mjOptions.sevenPairs} onChange={(e) => setOption('sevenPairs', e.target.checked)} /><i />七对算胡</label>
+              <label className="check"><input type="checkbox" checked={mjOptions.fourZhong} onChange={(e) => setOption('fourZhong', e.target.checked)} /><i />四红中直接胡</label>
+              <label className="check"><input type="checkbox" checked={mjOptions.zhongDiscard} onChange={(e) => setOption('zhongDiscard', e.target.checked)} /><i />红中可打出</label>
+            </div>
+            <Button kind="ghost" size="sm" className="play-main" onClick={() => setModal('mjrules')}>查看红中麻将规则</Button>
+          </div>
+        )}
+        <div className="play-body" style={{ display: game === 'poker' ? undefined : 'none' }}>
           <div className="play-row">
             <span className="muted">底注</span>
             <Coins value={hall.stake} size={17} />
@@ -261,6 +316,7 @@ export function Lobby() {
       {modal === 'signin' && <SigninModal onClose={() => setModal(null)} />}
       {modal === 'rank' && <LeaderboardModal onClose={() => setModal(null)} />}
       {modal === 'records' && <RecordsModal onClose={() => setModal(null)} />}
+      {modal === 'mjrules' && <MahjongRules onClose={() => setModal(null)} />}
       {modal === 'rules' && <RulesModal onClose={() => setModal(null)} onTutorial={() => setModal('tutorial')} />}
       {modal === 'profile' && <ProfileModal onClose={() => setModal(null)} />}
       {modal === 'shop' && <ShopModal onClose={() => setModal(null)} />}

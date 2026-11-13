@@ -1,5 +1,7 @@
 // 前后端共享的数据结构与消息协议。
 import type { GameView, RoundResult } from './engine.ts'
+import type { MjOptions } from './mahjong/game.ts'
+import type { MjAction, MjLevel, MjView } from './mahjong/view.ts'
 
 export interface UserProfile {
   id: string
@@ -26,6 +28,9 @@ export interface UserProfile {
   frame: string
   cardback: string
   felt: string
+  /** AI 教练（DeepSeek）：已保存的 API Key 掩码，空串表示未设置 */
+  aiKeyMask: string
+  aiModel: string
 }
 
 export type BotLevel = 'easy' | 'normal' | 'hard' | 'peek'
@@ -109,6 +114,9 @@ export interface MatchRecord {
   honorDelta: number
   players: { nickname: string; avatar: number; total: number; isBot: boolean; me: boolean }[]
   rounds: { round: number; deltas: number[]; hands: string[] }[]
+  /** 游戏类型：空为逮二游，mahjong 为红中麻将 */
+  game?: string
+  summary?: string
 }
 
 export interface LedgerItem {
@@ -195,6 +203,10 @@ export type ClientOp =
   | { op: 'again' }
   | { op: 'play'; round: number; cardIds: string[] }
   | { op: 'emote'; key: string }
+  | { op: 'mj:start'; hallId: string; level: MjLevel; options: MjOptions }
+  | { op: 'mj:act'; action: MjAction }
+  | { op: 'mj:next' }
+  | { op: 'mj:leave' }
   | { op: 'ping' }
 
 export type ClientMessage = ClientOp & { id: number }
@@ -205,6 +217,7 @@ export type ServerEvent =
   | { ev: 'room'; room: RoomView | null }
   | { ev: 'lobby'; lobby: LobbyState }
   | { ev: 'me'; user: UserProfile }
+  | { ev: 'mj'; table: MjView | null }
   | { ev: 'emote'; seat: number; key: string }
   | { ev: 'notice'; text: string }
   | { ev: 'kicked'; reason: string }

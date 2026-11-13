@@ -10,7 +10,7 @@ import { api } from '../net.ts'
 import { useStore } from '../store.ts'
 import { sfx } from '../sound.ts'
 import { CardView } from './CardView.tsx'
-import { Avatar, Button, CoinIcon, Coins, Modal, TitleBadge } from './ui.tsx'
+import { Avatar, Button, CoinIcon, Coins, Modal, MusicToggle, SoundToggle, TitleBadge, VoiceToggle } from './ui.tsx'
 
 type Close = { onClose: () => void }
 
@@ -157,7 +157,7 @@ export function RecordsModal({ onClose }: Close) {
             <button type="button" className="record-head" onClick={() => { sfx.click(); setOpen(open === record.id ? null : record.id) }}>
               <span className={`record-place place-${record.placement}`}>{['头名', '居中', '垫底'][Math.min(2, record.placement - 1)]}</span>
               <span className="record-hall">
-                <b>{hallById(record.hallId)?.name ?? '牌桌'}</b>
+                <b>{record.game === 'mahjong' ? '红中麻将' : hallById(record.hallId)?.name ?? '牌桌'}</b>
                 <small>{timeText(record.finishedAt)}</small>
               </span>
               <span className="record-players">
@@ -171,7 +171,8 @@ export function RecordsModal({ onClose }: Close) {
               <Coins value={record.coinsDelta} signed size={18} />
               <span className={`record-honor num ${record.honorDelta >= 0 ? 'up' : 'down'}`}>{record.honorDelta >= 0 ? '+' : ''}{record.honorDelta} 誉</span>
             </button>
-            {open === record.id && (
+            {open === record.id && record.game === 'mahjong' && <p className="record-summary">{hallById(record.hallId)?.name} · 每分 {formatCoins(record.stake)} 金币 · {record.summary ?? ''}</p>}
+            {open === record.id && record.game !== 'mahjong' && (
               <table className="record-detail">
                 <thead>
                   <tr>
@@ -283,7 +284,9 @@ export function ProfileModal({ onClose }: Close) {
   const setUser = useStore((state) => state.setUser)
   const logout = useStore((state) => state.logout)
   const toast = useStore((state) => state.toast)
-  const [tab, setTab] = useState<'info' | 'ledger' | 'bind' | 'safe'>('info')
+  const [tab, setTab] = useState<'info' | 'ledger' | 'bind' | 'safe' | 'ai' | 'prefs'>('info')
+  const [aiKey, setAiKey] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
   const setRecoveryCode = useStore((state) => state.setRecoveryCode)
   const [adminKey, setAdminKey] = useState('')
   const [nickname, setNickname] = useState(user.nickname)
@@ -322,6 +325,35 @@ export function ProfileModal({ onClose }: Close) {
     }
   }
 
+  const saveAi = async (body: { apiKey?: string; model?: string }, message: string) => {
+    if (aiBusy) return
+    setAiBusy(true)
+    try {
+      const data = await api<{ user: UserProfile }>('/me/ai', body)
+      setUser(data.user)
+      if (body.apiKey !== undefined) setAiKey('')
+      toast(message, 'gold')
+    } catch (error) {
+      toast((error as Error).message, 'error')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  const testAi = async () => {
+    if (aiBusy) return
+    setAiBusy(true)
+    try {
+      const reply = await api<{ text: string; model: string }>('/me/ai/test', {})
+      sfx.reward()
+      toast(`连接成功（${reply.model}）`, 'gold')
+    } catch (error) {
+      toast((error as Error).message, 'error')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   const regenerate = async () => {
     try {
       const data = await api<{ recoveryCode: string }>('/me/recovery', {})
@@ -344,10 +376,12 @@ export function ProfileModal({ onClose }: Close) {
   }
 
   return (
-    <Modal title="个人中心" onClose={onClose} width={760}>
+    <Modal title="个人中心" onClose={onClose} width={820}>
       <div className="tabs">
         <button type="button" className={`tab ${tab === 'info' ? 'on' : ''}`} onClick={() => setTab('info')}>我的档案</button>
         <button type="button" className={`tab ${tab === 'ledger' ? 'on' : ''}`} onClick={() => setTab('ledger')}>金币流水</button>
+        <button type="button" className={`tab ${tab === 'ai' ? 'on' : ''}`} onClick={() => setTab('ai')}>AI 教练</button>
+        <button type="button" className={`tab ${tab === 'prefs' ? 'on' : ''}`} onClick={() => setTab('prefs')}>偏好</button>
         {user.isGuest
           ? <button type="button" className={`tab ${tab === 'bind' ? 'on' : ''}`} onClick={() => setTab('bind')}>绑定账号</button>
           : <button type="button" className={`tab ${tab === 'safe' ? 'on' : ''}`} onClick={() => setTab('safe')}>账号安全</button>}
@@ -405,6 +439,48 @@ export function ProfileModal({ onClose }: Close) {
               <span className="ledger-balance num">余 {formatCoins(item.balance)}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'ai' && (
+        <div className="ai-settings">
+          <p className="modal-lead">红中麻将的「AI 教练点评」由 <b>DeepSeek</b> 提供。填入你自己的 API Key 后，每局结束可以让 AI 根据牌效数据写复盘。</p>
+          <div className={`ai-state ${user.aiKeyMask ? 'on' : ''}`}>
+            <span>{user.aiKeyMask ? <>已保存 API Key：<b>{user.aiKeyMask}</b></> : '尚未设置 API Key'}</span>
+            {user.aiKeyMask && (
+              <span style={{ display: 'flex', gap: 8 }}>
+                <Button kind="jade" size="sm" disabled={aiBusy} onClick={() => void testAi()}>测试连接</Button>
+                <Button kind="ghost" size="sm" disabled={aiBusy} onClick={() => void saveAi({ apiKey: '' }, '已清除 API Key')}>清除</Button>
+              </span>
+            )}
+          </div>
+          <label className="field">
+            <em>API Key</em>
+            <input className="input" type="password" value={aiKey} onChange={(e) => setAiKey(e.target.value.trim())} placeholder={user.aiKeyMask ? '填入新的 Key 可替换' : 'sk-…（在 DeepSeek 开放平台创建）'} autoComplete="off" maxLength={200} />
+          </label>
+          <div className="ai-models">
+            模型
+            {['deepseek-chat', 'deepseek-reasoner'].map((model) => (
+              <button key={model} type="button" className={`tab ${(user.aiModel || 'deepseek-chat') === model ? 'on' : ''}`} onClick={() => void saveAi({ model }, `已切换到 ${model}`)}>{model === 'deepseek-chat' ? '对话模型（快）' : '推理模型（慢而细）'}</button>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <Button kind="gold" size="md" disabled={aiBusy || aiKey.length < 16} onClick={() => void saveAi({ apiKey: aiKey }, 'API Key 已保存')}>保存 API Key</Button>
+          </div>
+          <p className="ai-note">
+            · Key 加密后保存在服务器，只用于替你调用 DeepSeek；页面上只显示掩码，任何接口都不会返回明文。<br />
+            · 调用产生的费用由你的 DeepSeek 账户承担，一次复盘大约消耗 1~2 千个 token。<br />
+            · 不填 Key 也能用逐手的牌效复盘，只是没有 AI 的文字点评。
+          </p>
+        </div>
+      )}
+
+      {tab === 'prefs' && (
+        <div className="prefs">
+          <div className="pref-row"><div><b>背景音乐</b><small>大厅与牌桌的背景音乐</small></div><MusicToggle /></div>
+          <div className="pref-row"><div><b>音效</b><small>出牌、碰杠、结算等所有音效</small></div><SoundToggle /></div>
+          <div className="pref-row"><div><b>语音报牌</b><small>麻将里用语音念出打出的牌和「碰」「杠」「自摸」（使用浏览器自带的中文语音）</small></div><VoiceToggle /></div>
+          <p className="ai-note">麻将的「教练提示」开关在牌桌右上角，可以随时打开或关闭。</p>
         </div>
       )}
 

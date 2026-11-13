@@ -1,5 +1,6 @@
 // 全局状态：登录态、大厅、房间快照，以及与服务器的交互动作。
 import { create } from 'zustand'
+import type { MjView } from '../shared/mahjong/view.ts'
 import type { ClientOp, LobbyState, RoomView, ServerEvent, SigninStatus, UserProfile } from '../shared/protocol.ts'
 import { ApiError, GameSocket, SocketStatus, api, setAuthToken } from './net.ts'
 import { music, sfx } from './sound.ts'
@@ -26,6 +27,8 @@ interface State {
   conn: SocketStatus
   lobby: LobbyState
   room: RoomView | null
+  /** 红中麻将牌桌 */
+  mj: MjView | null
   /** 本地保留的结算快照，直到玩家点"再来一局 / 返回大厅" */
   result: RoomView | null
   /** 服务器时钟 - 本地时钟 */
@@ -94,6 +97,9 @@ export const useStore = create<State>((set, get) => {
       case 'lobby':
         set({ lobby: event.lobby })
         break
+      case 'mj':
+        set({ mj: event.table })
+        break
       case 'me':
         set({ user: event.user })
         break
@@ -121,7 +127,7 @@ export const useStore = create<State>((set, get) => {
     socket?.close()
     writeToken('')
     setAuthToken('')
-    set({ token: '', user: null, signin: null, room: null, result: null, conn: 'idle' })
+    set({ token: '', user: null, signin: null, room: null, mj: null, result: null, conn: 'idle' })
   }
 
   const startSession = (token: string, user: UserProfile) => {
@@ -154,6 +160,7 @@ export const useStore = create<State>((set, get) => {
     conn: 'idle',
     lobby: { rooms: [], online: 0 },
     room: null,
+    mj: null,
     result: null,
     clockOffset: 0,
     toasts: [],

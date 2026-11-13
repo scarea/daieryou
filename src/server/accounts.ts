@@ -9,6 +9,7 @@ import { ACHIEVEMENTS, DAILY_TASKS, GrowthItem, GrowthStats, growthItems, season
 import { ShopKind, shopItem } from '../shared/shop.ts'
 import type { SettlementEntry, SigninStatus, UserProfile } from '../shared/protocol.ts'
 import { MatchDetail, Store, StoreStats, UserRow, parseList, toProfile } from './store.ts'
+import { AI_MODELS, AiReply, DEFAULT_AI_MODEL, coachReview, decryptSecret, encryptSecret, maskKey, pingModel } from './ai.ts'
 
 const SESSION_TTL_MS = 30 * 24 * 3600 * 1000
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,16}$/
@@ -103,7 +104,7 @@ export interface MatchPlayerInput {
 export class Accounts {
   private failures = new Map<string, { count: number; lockedUntil: number }>()
 
-  constructor(readonly store: Store, private hashIterations = 120000, private adminKey = '') {}
+  constructor(readonly store: Store, private hashIterations = 120000, private adminKey = '', private dataKey = '') {}
 
   /** 防刷：同一 IP 短时间内不能批量建号（本机回环地址不限） */
   private async checkIp(ip: string | undefined, guest: boolean): Promise<string | null> {
@@ -432,6 +433,57 @@ export class Accounts {
     await this.store.addFriend(userId, target.id)
   }
 
+  // ------------------------------ AI 教练（DeepSeek） ------------------------------
+
+  /** 保存用户自己的 DeepSeek API Key（加密存储）；传空串表示清除 */
+  async saveAiSettings(userId: string, input: { apiKey?: unknown; model?: unknown }): Promise<UserProfile> {
+    await this.requireUser(userId)
+    const fields: Partial<UserRow> = {}
+    if (input.model !== undefined) {
+      const model = String(input.model).trim()
+      if (!/^[a-zA-Z0-9._-]{3,40}$/.test(model)) throw new AppError('模型名称无效')
+      fields.ai_model = model
+    }
+    if (input.apiKey !== undefined) {
+      const apiKey = String(input.apiKey).trim()
+      if (apiKey === '') {
+        fields.ai_key = ''
+        fields.ai_mask = ''
+      } else {
+        if (apiKey.length < 16 || apiKey.length > 200 || /\s/.test(apiKey)) throw new AppError('API Key 格式不正确')
+        if (!this.dataKey) throw new AppError('服务器未配置加密密钥，暂时无法保存 API Key', 503)
+        fields.ai_key = await encryptSecret(apiKey, this.dataKey)
+        fields.ai_mask = maskKey(apiKey)
+      }
+    }
+    await this.store.updateUser(userId, fields)
+    return this.profile(userId)
+  }
+
+  private async aiCredentials(userId: string): Promise<{ apiKey: string; model: string }> {
+    const user = await this.requireUser(userId)
+    if (!user.ai_key) throw new AppError('还没有设置 DeepSeek API Key，请先到「个人设置 · AI 教练」填写')
+    if (!this.dataKey) throw new AppError('服务器未配置加密密钥', 503)
+    return { apiKey: await decryptSecret(user.ai_key, this.dataKey), model: user.ai_model || DEFAULT_AI_MODEL }
+  }
+
+  async testAi(userId: string): Promise<AiReply> {
+    const { apiKey, model } = await this.aiCredentials(userId)
+    return pingModel(apiKey, model)
+  }
+
+  /** 请 AI 为某一局写复盘；analysis 是客户端引擎算出的牌效数据 */
+  async aiReview(userId: string, matchId: unknown, analysis: unknown): Promise<AiReply> {
+    const text = String(analysis ?? '')
+    if (text.length < 20 || text.length > 12000) throw new AppError('复盘数据无效')
+    const detail = await this.store.getMatchDetail(String(matchId), userId)
+    if (!detail || detail.game !== 'mahjong') throw new AppError('没有找到这一局牌')
+    const { apiKey, model } = await this.aiCredentials(userId)
+    return coachReview(apiKey, model, text)
+  }
+
+  static readonly aiModels = AI_MODELS
+
   // ------------------------------ 运营后台 ------------------------------
 
   /** 用部署时配置的管理员口令，把当前账号设为管理员 */
@@ -492,11 +544,16 @@ export class Accounts {
   // ------------------------------ 对局结算 ------------------------------
 
   /** 一局结束：按总分 × 底注结算金币，并更新荣誉、经验与生涯数据 */
-  async settleMatch(hall: Hall, players: MatchPlayerInput[], rounds: MatchDetail['rounds']): Promise<SettlementEntry[]> {
+  async settleMatch(
+    hall: Hall,
+    players: MatchPlayerInput[],
+    rounds: MatchDetail['rounds'],
+    extra: { matchId?: string; game?: string; summary?: string; record?: unknown; label?: string } = {},
+  ): Promise<SettlementEntry[]> {
     const placements = finalPlacements(players.map((player) => player.total))
     const lastPlacement = Math.max(...placements)
     const allTied = lastPlacement === 1
-    const matchId = randomUUID()
+    const matchId = extra.matchId ?? randomUUID()
     const finishedAt = Date.now()
     const today = dayNumber()
     for (const player of players) {
@@ -515,6 +572,7 @@ export class Accounts {
             userId: player.userId, nickname: player.nickname, avatar: player.avatar, total: player.total, isBot: player.isBot,
           })),
           rounds,
+          ...(extra.game ? { game: extra.game, summary: extra.summary, record: extra.record } : {}),
         },
       })
       for (const [index, player] of players.entries()) {
@@ -525,7 +583,7 @@ export class Accounts {
         let honorApplied = honor
         const user = player.isBot ? undefined : await tx.getUser(player.userId)
         if (user) {
-          coinsDelta = await tx.addCoins(player.userId, coinsDelta, `${hall.name}对局 · ${player.total >= 0 ? '+' : ''}${player.total}分`)
+          coinsDelta = await tx.addCoins(player.userId, coinsDelta, `${extra.label ?? hall.name}对局 · ${player.total >= 0 ? '+' : ''}${player.total}分`)
           const nextHonor = Math.max(0, user.honor + honor)
           honorApplied = nextHonor - user.honor
           await tx.updateUser(player.userId, {

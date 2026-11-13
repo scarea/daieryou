@@ -2,7 +2,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { AVATARS, formatCoins, levelOf, titleOf } from '../../shared/economy.ts'
 import { useStore } from '../store.ts'
-import { music, sfx } from '../sound.ts'
+import { music, sfx, voice } from '../sound.ts'
 
 export function Avatar({ index, size = 64, ring = true, dim = false, frame = '' }: { index: number; size?: number; ring?: boolean; dim?: boolean; frame?: string }) {
   const def = AVATARS[index] ?? AVATARS[0]
@@ -176,4 +176,22 @@ export function CountUp({ value, from, duration, delay, signed = false, tick = f
   useEffect(() => setTarget(value), [value])
   const current = useCountUp(target, duration, delay, tick)
   return <>{signed && current > 0 ? '+' : ''}{formatCoins(current)}</>
+}
+
+export function VoiceToggle() {
+  const [on, setOn] = useState(voice.isOn())
+  return (
+    <button
+      type="button"
+      className={`icon-btn ${on ? '' : 'is-off'}`}
+      title={on ? '关闭语音报牌' : '开启语音报牌'}
+      onClick={() => {
+        voice.setOn(!on)
+        setOn(!on)
+        if (!on) voice.say('语音已开启')
+      }}
+    >
+      语
+    </button>
+  )
 }

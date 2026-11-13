@@ -40,6 +40,10 @@ export interface UserRow {
   /** JSON 数组：已领取的成就 */
   ach_claimed: string
   season: string
+  /** 加密后的 DeepSeek API Key、展示用掩码、所选模型 */
+  ai_key: string
+  ai_mask: string
+  ai_model: string
 }
 
 export function parseList(text: string | null | undefined): string[] {
@@ -54,6 +58,10 @@ export function parseList(text: string | null | undefined): string[] {
 export interface MatchDetail {
   players: { userId: string; nickname: string; avatar: number; total: number; isBot: boolean }[]
   rounds: { round: number; deltas: number[]; hands: string[] }[]
+  game?: string
+  summary?: string
+  /** 麻将牌谱等附加数据 */
+  record?: unknown
 }
 
 export function toProfile(row: UserRow): UserProfile {
@@ -77,6 +85,8 @@ export function toProfile(row: UserRow): UserProfile {
     frame: row.frame || '',
     cardback: row.cardback || '',
     felt: row.felt || '',
+    aiKeyMask: row.ai_mask || '',
+    aiModel: row.ai_model || '',
   }
 }
 
@@ -102,6 +112,8 @@ export interface Store {
   insertMatch(match: MatchInsert): Promise<void>
   insertMatchPlayer(row: MatchPlayerInsert): Promise<void>
   listMatches(userId: string, limit?: number): Promise<MatchRecord[]>
+  /** 取某一局的完整详情；只有参与者能取到 */
+  getMatchDetail(matchId: string, userId: string): Promise<MatchDetail | undefined>
   leaderboard(kind: BoardKind, limit?: number): Promise<LeaderboardRow[]>
   rankOf(userId: string, kind: BoardKind): Promise<number>
   /** 某 IP 在 since 之后创建的账号数（guest=true 只算游客，false 只算正式账号） */
@@ -142,6 +154,9 @@ export const USER_EXTRA_COLUMNS: [string, string][] = [
   ['day_claimed', "text not null default '[]'"],
   ['ach_claimed', "text not null default '[]'"],
   ['season', "text not null default ''"],
+  ['ai_key', "text not null default ''"],
+  ['ai_mask', "text not null default ''"],
+  ['ai_model', "text not null default ''"],
 ]
 
 export interface MatchRow {
@@ -164,5 +179,7 @@ export function toMatchRecord(row: MatchRow, userId: string): MatchRecord {
       nickname: player.nickname, avatar: player.avatar, total: player.total, isBot: player.isBot, me: player.userId === userId,
     })),
     rounds: detail.rounds,
+    game: detail.game,
+    summary: detail.summary,
   }
 }

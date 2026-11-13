@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { LeaderboardRow, LedgerItem, MatchRecord } from '../shared/protocol.ts'
 import {
-  BoardKind, MatchInsert, MatchPlayerInsert, MatchRow, NewUser, Store, StoreStats, USER_EXTRA_COLUMNS, UserRow, toMatchRecord,
+  BoardKind, MatchDetail, MatchInsert, MatchPlayerInsert, MatchRow, NewUser, Store, StoreStats, USER_EXTRA_COLUMNS, UserRow, toMatchRecord,
 } from './store.ts'
 
 const SCHEMA = `
@@ -194,6 +194,13 @@ class SyncSqlite {
     return rows.map((row) => toMatchRecord(row, userId))
   }
 
+  getMatchDetail(matchId: string, userId: string): MatchDetail | undefined {
+    const row = this.db
+      .prepare('SELECT m.detail FROM matches m JOIN match_players p ON p.match_id = m.id WHERE m.id = ? AND p.user_id = ?')
+      .get(matchId, userId) as { detail: string } | undefined
+    return row ? (JSON.parse(row.detail) as MatchDetail) : undefined
+  }
+
   // ------------------------------ 排行榜 ------------------------------
 
   leaderboard(kind: BoardKind, limit = 30): LeaderboardRow[] {
@@ -304,6 +311,7 @@ export class SqliteStore implements Store {
   async insertMatch(match: MatchInsert) { this.inner.insertMatch(match) }
   async insertMatchPlayer(row: MatchPlayerInsert) { this.inner.insertMatchPlayer(row) }
   async listMatches(userId: string, limit?: number): Promise<MatchRecord[]> { return this.inner.listMatches(userId, limit) }
+  async getMatchDetail(matchId: string, userId: string) { return this.inner.getMatchDetail(matchId, userId) }
   async leaderboard(kind: BoardKind, limit?: number): Promise<LeaderboardRow[]> { return this.inner.leaderboard(kind, limit) }
   async rankOf(userId: string, kind: BoardKind) { return this.inner.rankOf(userId, kind) }
   async countUsersByIp(ip: string, since: number, guest: boolean) { return this.inner.countUsersByIp(ip, since, guest) }

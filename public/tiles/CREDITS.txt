@@ -1,0 +1,6 @@
+麻将牌面矢量图来自 FluffyStuff/riichi-mahjong-tiles（Regular 套）
+https://github.com/FluffyStuff/riichi-mahjong-tiles
+作者声明：All assets are in the public domain (CC0 1.0).
+https://creativecommons.org/publicdomain/zero/1.0/
+
+文件对应：m1~m9 = Man1~9（万），s1~s9 = Sou1~9（条），p1~p9 = Pin1~9（筒），zhong = Chun（红中）。

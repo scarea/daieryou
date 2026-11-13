@@ -3,6 +3,7 @@
 import type { AdminUser, ClientMessage, FriendInfo, ServerEvent } from '../shared/protocol.ts'
 import { SHOP_ITEMS } from '../shared/shop.ts'
 import { Accounts, AppError } from './accounts.ts'
+import { MahjongManager, MjTimings } from './mahjong.ts'
 import { Hub, RoomManager, RoomTimings } from './rooms.ts'
 import type { Store, UserRow } from './store.ts'
 
@@ -41,8 +42,8 @@ export const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Max-Age': '86400',
 }
 
-export function createApp(store: Store, options: { hashIterations?: number; timings?: RoomTimings; adminKey?: string } = {}) {
-  const accounts = new Accounts(store, options.hashIterations, options.adminKey)
+export function createApp(store: Store, options: { hashIterations?: number; timings?: RoomTimings; adminKey?: string; dataKey?: string; mjTimings?: MjTimings } = {}) {
+  const accounts = new Accounts(store, options.hashIterations, options.adminKey, options.dataKey)
   const connections = new Map<string, Connection>()
 
   const hub: Hub = {
@@ -59,6 +60,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
     onlineUserIds: () => [...connections.keys()],
   }
   const rooms = new RoomManager(accounts, hub, options.timings)
+  const mahjong = new MahjongManager(accounts, hub, options.mjTimings)
 
   // ------------------------------ HTTP ------------------------------
 
@@ -127,6 +129,22 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
     'POST /api/me/growth/claim': async (request) => {
       const user = await requireAuth(request)
       return accounts.claimGrowth(user.id, (await request.body()).id)
+    },
+    'POST /api/me/ai': async (request) => {
+      const user = await requireAuth(request)
+      return { user: await accounts.saveAiSettings(user.id, await request.body()) }
+    },
+    'POST /api/me/ai/test': async (request) => accounts.testAi((await requireAuth(request)).id),
+    'POST /api/mahjong/review': async (request) => {
+      const user = await requireAuth(request)
+      const body = await request.body()
+      return accounts.aiReview(user.id, body.matchId, body.analysis)
+    },
+    'GET /api/mahjong/match': async (request) => {
+      const user = await requireAuth(request)
+      const detail = await store.getMatchDetail(String(request.query.get('id') || ''), user.id)
+      if (!detail || detail.game !== 'mahjong') throw new AppError('没有找到这一局牌', 404)
+      return { record: detail.record, summary: detail.summary, players: detail.players }
     },
     'GET /api/shop': async () => ({ items: SHOP_ITEMS }),
     'POST /api/shop/buy': async (request) => {
@@ -211,7 +229,21 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
   // ------------------------------ WebSocket ------------------------------
 
   function handleOp(userId: string, message: ClientMessage): unknown {
+    // 麻将桌与扑克房间互斥：一次只能在一张桌上
+    if (message.op.startsWith('mj:')) {
+      if (rooms.roomOf(userId)) throw new AppError('请先离开当前的牌桌')
+    } else if (mahjong.has(userId) && ['quick', 'create', 'join', 'match', 'spectate'].includes(message.op)) {
+      throw new AppError('请先离开麻将桌')
+    }
     switch (message.op) {
+      case 'mj:start':
+        return mahjong.start(userId, String(message.hallId), message.level, message.options)
+      case 'mj:act':
+        return mahjong.act(userId, message.action)
+      case 'mj:next':
+        return mahjong.next(userId)
+      case 'mj:leave':
+        return mahjong.leave(userId)
       case 'lobby':
         return rooms.lobbyState()
       case 'quick':
@@ -293,6 +325,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
           connections.set(user.id, connection)
           reply({ ev: 'res', id, ok: true, data: { user: await accounts.profile(user.id) } })
           await rooms.onConnect(user.id)
+          mahjong.onConnect(user.id)
           return
         }
         if (!connection.userId) throw new AppError('请先登录', 401)
@@ -315,5 +348,5 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
     return { onMessage, onClose }
   }
 
-  return { accounts, rooms, handleHttp, attach, onlineCount: () => connections.size }
+  return { accounts, rooms, mahjong, handleHttp, attach, onlineCount: () => connections.size }
 }
