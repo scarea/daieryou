@@ -5,7 +5,9 @@ import { analyzeDiscards, shanten, waits } from '../../shared/mahjong/hand.ts'
 import type { DiceRound, Meld, MjAction } from '../../shared/mahjong/game.ts'
 import { KIND_COUNT, ZHONG, countKinds, kindName, kindOf, kindShort, sortTiles } from '../../shared/mahjong/tiles.ts'
 import { MJ_LEVEL_NAME, MjSeatView, MjView } from '../../shared/mahjong/view.ts'
+import { stageUp, useStage } from '../components/Stage.tsx'
 import { Avatar, Button, Coins, CountUp, Modal, MusicToggle, SoundToggle } from '../components/ui.tsx'
+import { api } from '../net.ts'
 import { useStore } from '../store.ts'
 import { sfx, voice } from '../sound.ts'
 import { MahjongRules } from './MahjongRules.tsx'
@@ -137,7 +139,32 @@ export function Mahjong({ table }: { table: MjView }) {
   const [burst, setBurst] = useState<{ seat: number; text: string; key: number } | null>(null)
   const [resultStage, setResultStage] = useState(0)
   const [busy, setBusy] = useState(false)
-  const drag = useRef<{ tile: number; y: number } | null>(null)
+  const drag = useRef<{ tile: number; x: number; y: number } | null>(null)
+  const { rotated } = useStage()
+  const toast = useStore((state) => state.toast)
+  const [added, setAdded] = useState<string[]>([])
+  const [now, setNow] = useState(Date.now())
+  const practice = table.mode === 'practice'
+  const showCoach = coach && practice
+
+  // 真人牌桌的出牌倒计时：用服务器时钟校准
+  const clockOffset = useRef(0)
+  useEffect(() => {
+    clockOffset.current = table.serverNow - Date.now()
+  }, [table.seq, table.serverNow])
+  useEffect(() => {
+    if (!table.deadlineAt) return
+    const timer = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [table.deadlineAt])
+  const remain = table.deadlineAt ? Math.max(0, Math.ceil((table.deadlineAt - (now + clockOffset.current)) / 1000)) : null
+  const lastTick = useRef(0)
+  useEffect(() => {
+    if (remain !== null && remain > 0 && remain <= 5 && lastTick.current !== remain && (table.phase === 'claim' ? table.claimSeat === 0 : table.phase === 'play' && table.turn === 0)) {
+      lastTick.current = remain
+      sfx.tick()
+    }
+  }, [remain]) // eslint-disable-line react-hooks/exhaustive-deps
   const sceneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => preloadTiles(), [])
@@ -319,14 +346,14 @@ export function Mahjong({ table }: { table: MjView }) {
 
   const onTileDown = (event: PointerEvent, tile: number) => {
     if (!canDiscard) return
-    drag.current = { tile, y: event.clientY }
+    drag.current = { tile, x: event.clientX, y: event.clientY }
   }
   const onTileUp = (event: PointerEvent, tile: number) => {
     if (!canDiscard) return
     const start = drag.current
     drag.current = null
     // 往上甩出去：直接打出
-    if (start && start.tile === tile && start.y - event.clientY > 46) return discard(tile)
+    if (start && start.tile === tile && stageUp(rotated, event.clientX - start.x, event.clientY - start.y) > 40) return discard(tile)
     if (selected === tile) return discard(tile)
     sfx.tilePick()
     setSelected(tile)
@@ -355,8 +382,8 @@ export function Mahjong({ table }: { table: MjView }) {
 
   const renderHandTile = (tile: number, extra = '') => {
     const kind = kindOf(tile)
-    const option = coach && advice ? advice.byKind.get(kind) : null
-    const best = coach && advice?.bestKinds.has(kind)
+    const option = showCoach && advice ? advice.byKind.get(kind) : null
+    const best = showCoach && advice?.bestKinds.has(kind)
     const blocked = canDiscard && !table.choices.discards.includes(tile)
     return (
       <button
@@ -382,15 +409,15 @@ export function Mahjong({ table }: { table: MjView }) {
       {/* ------------------------------ 顶栏 ------------------------------ */}
       <header className="table-top">
         <div className="table-top-left">
-          <Button kind="ghost" size="sm" onClick={() => (table.phase === 'over' || table.phase === 'dice' ? void leave() : setModal('leave'))}>‹ 离开</Button>
+          <Button kind="ghost" size="sm" onClick={() => (table.phase === 'over' || table.phase === 'dice' || table.phase === 'waiting' ? void leave() : setModal('leave'))}>‹ 离开</Button>
           <div className="table-hall">
             <b className="gold-text">红中麻将</b>
             <span>{hall?.name} · 每分 <Coins value={table.stake} size={15} /></span>
-            <span className="muted">第 {table.handNo} 局 · {MJ_LEVEL_NAME[table.level]}试炼</span>
+            <span className="muted">{practice ? `第 ${table.handNo} 局 · ${MJ_LEVEL_NAME[table.level]}试炼` : table.phase === 'waiting' ? `房号 ${table.roomId}` : `第 ${table.handNo} 局 · 房号 ${table.roomId}`}</span>
           </div>
         </div>
         <div className="table-top-right">
-          <button type="button" className={`mj-switch ${coach ? 'on' : ''}`} onClick={toggleCoach} title="出牌时显示每种打法的进张数">教练提示</button>
+          {practice && <button type="button" className={`mj-switch ${coach ? 'on' : ''}`} onClick={toggleCoach} title="出牌时显示每种打法的进张数">教练提示</button>}
           <button
             type="button"
             className={`mj-switch ${voiceOn ? 'on' : ''}`}
@@ -407,7 +434,7 @@ export function Mahjong({ table }: { table: MjView }) {
       <div className="mj-plane">
         <div className="mj-felt"><div className="mj-felt-inner"><i className="mj-spot" /></div></div>
 
-        {table.phase !== 'dice' && (
+        {table.phase !== 'dice' && table.phase !== 'waiting' && (
           <div className="mj-center">
             <div className="mj-wall">
               <small>余牌</small>
@@ -425,7 +452,7 @@ export function Mahjong({ table }: { table: MjView }) {
           </div>
         )}
 
-        {table.phase !== 'dice' && table.seats.map((seat) => {
+        {table.phase !== 'dice' && table.phase !== 'waiting' && table.seats.map((seat) => {
           const side = SIDES[seat.seat]
           return (
             <div key={seat.seat} className={`mj-seat mj-seat-${side}`}>
@@ -449,16 +476,18 @@ export function Mahjong({ table }: { table: MjView }) {
       </div>
 
       {/* ------------------------------ 悬浮层（不带透视）：头像与碰杠胡的大字 ------------------------------ */}
-      {table.phase !== 'dice' && table.seats.map((seat) => {
+      {table.phase !== 'dice' && table.phase !== 'waiting' && table.seats.map((seat) => {
         const side = SIDES[seat.seat]
         const active = table.phase === 'claim' ? table.claimSeat === seat.seat : table.phase === 'play' && table.turn === seat.seat
         return (
           <div key={seat.seat} className={`mj-seat mj-seat-${side} ${active ? 'active' : ''}`}>
             <div className="mj-player">
-              <Avatar index={seat.avatar} size={side === 'bottom' ? 66 : 54} frame={seat.frame} />
+              <Avatar index={seat.avatar} size={side === 'bottom' ? 66 : 54} frame={seat.frame} dim={seat.trustee} />
+              {active && remain !== null && <i className={`mj-clock num ${remain <= 5 ? 'urgent' : ''}`}>{remain}</i>}
+              {seat.trustee && <i className="mj-trustee">托管</i>}
               <div className="mj-player-info">
                 <b>{seat.name}</b>
-                <small>{seat.isBot ? MJ_LEVEL_NAME[table.level] : `${formatCoins(user.coins)} 金币`}</small>
+                <small>{seat.isBot ? `机器人 · ${MJ_LEVEL_NAME[table.level]}` : seat.seat === 0 ? `${formatCoins(user.coins)} 金币` : seat.trustee ? '掉线 · 机器人代打' : '玩家'}</small>
               </div>
               {table.dealer === seat.seat && <i className="mj-dealer">庄</i>}
             </div>
@@ -468,7 +497,7 @@ export function Mahjong({ table }: { table: MjView }) {
       })}
 
       {/* ------------------------------ 我的手牌 ------------------------------ */}
-      {table.phase !== 'dice' && (
+      {table.phase !== 'dice' && table.phase !== 'waiting' && (
         <div className={`mj-hand ${table.phase === 'over' ? 'revealed' : ''}`}>
           <div className="mj-hand-tiles">
             {handOrder.map((tile) => renderHandTile(tile))}
@@ -495,7 +524,7 @@ export function Mahjong({ table }: { table: MjView }) {
       )}
 
       {/* ------------------------------ 教练面板 ------------------------------ */}
-      {coach && table.phase !== 'dice' && table.phase !== 'over' && (
+      {showCoach && table.phase !== 'dice' && table.phase !== 'waiting' && table.phase !== 'over' && (
         <div className="mj-coach">
           <div className="mj-coach-head">
             <i>师</i>
@@ -524,7 +553,50 @@ export function Mahjong({ table }: { table: MjView }) {
           {myClaim && <p>别人打出 <em>{lastTile ? kindShort(kindOf(lastTile.tile)) : ''}</em>：碰了能更近一步才划算；能杠就杠，白拿 3 分。</p>}
         </div>
       )}
-      {!coach && tenpai && tenpai.length > 0 && table.phase !== 'over' && <div className="mj-tenpai">已听牌</div>}
+      {!showCoach && tenpai && tenpai.length > 0 && table.phase !== 'over' && <div className="mj-tenpai">已听牌</div>}
+
+      {/* ------------------------------ 等人入座 ------------------------------ */}
+      {table.phase === 'waiting' && (
+        <div className={`waiting mj-waiting ${table.matching ? 'matching' : ''}`}>
+          <div className="waiting-hall gold-text">红中麻将 · {hall?.name}</div>
+          {table.matching ? (
+            <div className="match-radar"><i /><i /><i /><b className="num">{remain ?? ''}</b></div>
+          ) : (
+            <button
+              type="button"
+              className="waiting-code"
+              title="点击复制房号"
+              onClick={() => void navigator.clipboard.writeText(table.roomId).then(() => toast('房号已复制，发给朋友就能加入', 'gold')).catch(() => toast(`房号：${table.roomId}`))}
+            >
+              <small>房号</small>
+              <b className="num">{table.roomId}</b>
+              <em>复制</em>
+            </button>
+          )}
+          <div className="mj-waiting-seats">
+            {table.seats.map((seat) => (
+              <div key={seat.seat} className={`mj-waiting-seat ${seat.empty ? 'empty' : ''}`}>
+                {seat.empty ? <span className="vacant-ring">空位</span> : <Avatar index={seat.avatar} size={64} frame={seat.frame} />}
+                <b>{seat.empty ? '等人入座' : seat.name}</b>
+                {!seat.empty && table.hostSeat === seat.seat && !table.matching && <i className="seat-host">房主</i>}
+              </div>
+            ))}
+          </div>
+          <div className="waiting-meta">每分 <Coins value={table.stake} size={16} /> <span>·</span> {table.matching ? '凑齐四人立即开局，等不到就由机器人补位' : table.isPrivate ? '私密牌桌，凭房号加入' : '公开牌桌，大厅可见'}</div>
+          {!table.matching && (
+            <div className="waiting-actions">
+              <Button
+                kind="ghost"
+                size="md"
+                onClick={() => void navigator.clipboard.writeText(`${location.origin}/?room=${table.roomId}`).then(() => toast('邀请链接已复制，朋友打开就能入座', 'gold')).catch(() => toast(`房号：${table.roomId}`))}
+              >复制邀请链接</Button>
+              {table.hostSeat === 0
+                ? <Button kind="gold" size="lg" onClick={() => void send({ op: 'mj:begin' })}>{table.seats.some((seat) => seat.empty) ? '开始（空位补机器人）' : '开始'}</Button>
+                : <div className="waiting-hint">等房主开始…</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ------------------------------ 掷骰 ------------------------------ */}
       {table.phase === 'dice' && table.dice && <DiceStage rounds={table.dice} dealer={table.dealer} seats={table.seats} />}
@@ -577,7 +649,17 @@ export function Mahjong({ table }: { table: MjView }) {
                     const sign = (value: number) => (value > 0 ? `+${value}` : `${value}`)
                     return (
                       <tr key={seat.seat} className={`${seat.seat === 0 ? 'me' : ''} ${seat.seat === result.winner ? 'winner' : ''}`}>
-                        <td><Avatar index={seat.avatar} size={30} ring={false} /> {seat.name}{table.dealer === seat.seat && <i className="mj-dealer">庄</i>}</td>
+                        <td>
+                          <Avatar index={seat.avatar} size={30} ring={false} /> {seat.name}{table.dealer === seat.seat && <i className="mj-dealer">庄</i>}
+                          {!practice && seat.ready && !seat.isBot && <em className="mj-ready">已准备</em>}
+                          {seat.seat !== 0 && seat.userId && !added.includes(seat.userId) && (
+                            <button
+                              type="button"
+                              className="mj-add-friend"
+                              onClick={() => void api('/friends/add', { userId: seat.userId }).then(() => { setAdded((list) => [...list, seat.userId]); toast('已加为好友', 'gold') }).catch((error) => toast((error as Error).message, 'error'))}
+                            >+ 好友</button>
+                          )}
+                        </td>
                         <td className={kong > 0 ? 'up' : kong < 0 ? 'down' : ''}>{kong === 0 ? '—' : sign(kong)}</td>
                         <td className={win > 0 ? 'up' : win < 0 ? 'down' : ''}>{win === 0 ? '—' : sign(win)}</td>
                         <td className={`big ${seat.score > 0 ? 'up' : seat.score < 0 ? 'down' : ''}`}>{sign(seat.score)}</td>
@@ -603,7 +685,7 @@ export function Mahjong({ table }: { table: MjView }) {
                 </div>
                 <div className="result-actions">
                   <Button kind="ghost" size="md" onClick={() => void leave()}>离开</Button>
-                  <Button kind="gold" size="lg" onClick={() => void send({ op: 'mj:next' })}>下一局</Button>
+                  <Button kind="gold" size="lg" disabled={me.ready} onClick={() => void send({ op: 'mj:next' })}>{me.ready ? '等其他人准备…' : '下一局'}</Button>
                   <Button kind="jade" size="md" disabled={!table.record || !table.settlement} onClick={() => setModal('review')}>复盘这一局</Button>
                 </div>
               </>
@@ -623,7 +705,9 @@ export function Mahjong({ table }: { table: MjView }) {
       {modal === 'rules' && <MahjongRules onClose={() => setModal(null)} />}
       {modal === 'leave' && (
         <Modal title="离开牌桌" onClose={() => setModal(null)} width={520}>
-          <p className="modal-lead">这一局还没打完。现在离开，这局已经结算的杠分照常入账，<br />未胡的部分不计输赢。</p>
+          <p className="modal-lead">{practice
+            ? <>这一局还没打完。现在离开，这局已经结算的杠分照常入账，<br />未胡的部分不计输赢。</>
+            : <>这一局还没打完。现在离开，你的座位会由机器人替你打完，<br />这一局的输赢照常算在你头上。</>}</p>
           <div className="modal-actions">
             <Button kind="ghost" size="md" onClick={() => void leave()}>仍要离开</Button>
             <Button kind="gold" size="md" onClick={() => setModal(null)}>继续打</Button>

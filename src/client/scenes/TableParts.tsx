@@ -136,7 +136,7 @@ export function WaitingPanel({ room }: { room: RoomView }) {
             </div>
           )}
           <div className="waiting-actions">
-            <Button kind="ghost" size="md" onClick={() => void copy(`${location.origin}/?room=${room.id}`, '邀请链接已复制，好友打开即可入座')}>复制邀请链接</Button>
+            <Button kind="ghost" size="md" onClick={() => void copy(`${location.origin}/?room=${room.id}`, '邀请链接已复制，朋友打开就能入座')}>复制邀请链接</Button>
             <Button kind="gold" size="lg" disabled={seated < 3} onClick={() => void send({ op: 'start' })}>
               {seated < 3 ? '等待满员' : '开始游戏'}
             </Button>

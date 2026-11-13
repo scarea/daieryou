@@ -14,6 +14,14 @@ export const MJ_LEVEL_DESC: Record<MjLevel, string> = {
 
 export interface MjSeatView {
   seat: number
+  /** 等待阶段的空座位 */
+  empty: boolean
+  userId: string
+  online: boolean
+  /** 托管中：掉线或离开，由机器人代打 */
+  trustee: boolean
+  /** 结算后是否已点「下一局」 */
+  ready: boolean
   name: string
   avatar: number
   frame: string
@@ -38,18 +46,30 @@ export interface MjSettlement {
 }
 
 export interface MjView {
+  /** 6 位房号 */
+  roomId: string
+  /** practice：单人对机器人；room：真人房间（好友约局 / 快速匹配） */
+  mode: 'practice' | 'room'
+  isPrivate: boolean
+  /** 快速匹配中：到时由机器人补齐 */
+  matching: boolean
+  /** 房主的座位（以我为 0 号位的相对座位） */
+  hostSeat: number
+  /** 当前操作的截止时间（服务器时钟）；没有限时为 null */
+  deadlineAt: number | null
+  serverNow: number
   hallId: string
   stake: number
   level: MjLevel
   options: MjOptions
   handNo: number
-  /** dice：掷骰定庄动画中 */
-  phase: 'dice' | 'play' | 'claim' | 'over'
+  /** waiting：等人入座；dice：掷骰定庄动画中 */
+  phase: 'waiting' | 'dice' | 'play' | 'claim' | 'over'
   dice: DiceRound[] | null
   dealer: number
   turn: number
   wallCount: number
-  /** 我的座位固定为 0 */
+  /** 所有座位号都已换算成以我为 0 号位（我在下方，1 右、2 对家、3 左） */
   hand: number[]
   drawn: number | null
   choices: MjChoices

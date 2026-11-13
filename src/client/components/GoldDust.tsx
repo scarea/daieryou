@@ -18,7 +18,7 @@ export function GoldDust({ count = 70 }: { count?: number }) {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     const W = 1280
-    const H = 720
+    const H = 1280
     canvas.width = W
     canvas.height = H
     const motes: Mote[] = Array.from({ length: count }, () => ({

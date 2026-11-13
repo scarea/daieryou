@@ -182,6 +182,8 @@ export class RoomManager {
       if (!members.some((member) => !member.isBot)) continue
       rooms.push({
         id: room.id,
+        game: 'd2y',
+        seats: PLAYER_COUNT,
         hallId: room.hall.id,
         stake: room.hall.stake,
         status: room.status,
@@ -189,6 +191,7 @@ export class RoomManager {
         players: members.map((member) => ({ nickname: member.nickname, avatar: member.avatar, isBot: member.isBot })),
       })
     }
+    if (this.extraLobbyRooms) rooms.push(...this.extraLobbyRooms())
     rooms.sort((a, b) => (a.status === 'playing' ? 1 : 0) - (b.status === 'playing' ? 1 : 0))
     return { rooms: rooms.slice(0, 60), online: this.hub.onlineUserIds().length }
   }
@@ -300,13 +303,27 @@ export class RoomManager {
     })
   }
 
+  /** 其他游戏的公开牌桌（由应用层注入），一并出现在大厅列表里 */
+  extraLobbyRooms: (() => LobbyRoom[]) | null = null
+  /** 判断某用户是否在别的游戏的牌桌上（在的话不给他推大厅） */
+  busyElsewhere: ((userId: string) => boolean) | null = null
+
+  /** 大厅列表有变化时调用：合并短时间内的多次变化后统一推送 */
+  refreshLobby(): void {
+    this.broadcastLobbySoon()
+  }
+
+  hasRoom(roomId: string): boolean {
+    return this.rooms.has(roomId)
+  }
+
   private broadcastLobbySoon(): void {
     if (this.lobbyTimer) return
     this.lobbyTimer = setTimeout(() => {
       this.lobbyTimer = null
       const lobby = this.lobbyState()
       for (const userId of this.hub.onlineUserIds()) {
-        if (!this.userRoom.has(userId)) this.hub.send(userId, { ev: 'lobby', lobby })
+        if (!this.userRoom.has(userId) && !this.busyElsewhere?.(userId)) this.hub.send(userId, { ev: 'lobby', lobby })
       }
     }, 120)
     this.lobbyTimer.unref?.()
@@ -324,7 +341,8 @@ export class RoomManager {
 
   private newRoomId(): string {
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const id = String(Math.floor(100000 + this.random() * 900000))
+      // 9 开头的房号留给红中麻将
+      const id = String(Math.floor(100000 + this.random() * 800000))
       if (!this.rooms.has(id)) return id
     }
     throw new AppError('房间号分配失败，请重试')

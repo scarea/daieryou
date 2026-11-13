@@ -5,6 +5,8 @@ import {
   formatCoins, hallById, levelOf, titleOf,
 } from '../../shared/economy.ts'
 import { makeCard } from '../../shared/cards.ts'
+import { GAMES, GameId, gameById } from '../../shared/games.ts'
+import { MahjongRulesBody } from '../mahjong/MahjongRules.tsx'
 import type { LeaderboardRow, LedgerItem, MatchRecord, SigninStatus, UserProfile } from '../../shared/protocol.ts'
 import { api } from '../net.ts'
 import { useStore } from '../store.ts'
@@ -157,7 +159,7 @@ export function RecordsModal({ onClose }: Close) {
             <button type="button" className="record-head" onClick={() => { sfx.click(); setOpen(open === record.id ? null : record.id) }}>
               <span className={`record-place place-${record.placement}`}>{['头名', '居中', '垫底'][Math.min(2, record.placement - 1)]}</span>
               <span className="record-hall">
-                <b>{record.game === 'mahjong' ? '红中麻将' : hallById(record.hallId)?.name ?? '牌桌'}</b>
+                <b>{gameById(record.game ?? 'd2y')?.name} · {hallById(record.hallId)?.name ?? ''}</b>
                 <small>{timeText(record.finishedAt)}</small>
               </span>
               <span className="record-players">
@@ -219,11 +221,18 @@ const HAND_SAMPLES: [string, string, string][] = [
   ['散牌', '以上皆非，比单张', 'SA HJ D4'],
 ]
 
-export function RulesModal({ onClose, onTutorial }: Close & { onTutorial?: () => void }) {
+export function RulesModal({ onClose, onTutorial, initial = 'mahjong' }: Close & { onTutorial?: () => void; initial?: GameId }) {
+  const [game, setGame] = useState<GameId>(initial)
   return (
     <Modal title="玩法规则" onClose={onClose} width={860}>
-      <div className="rules">
-        {onTutorial && <div className="rules-tutorial"><Button kind="gold" size="sm" onClick={onTutorial}>观看新手教学</Button></div>}
+      <div className="tabs">
+        {GAMES.map((item) => (
+          <button key={item.id} type="button" className={`tab ${game === item.id ? 'on' : ''}`} onClick={() => { sfx.click(); setGame(item.id) }}>{item.name}</button>
+        ))}
+      </div>
+      {game === 'mahjong' && <MahjongRulesBody />}
+      <div className="rules" style={{ display: game === 'd2y' ? undefined : 'none' }}>
+        {onTutorial && <div className="rules-tutorial"><Button kind="gold" size="sm" onClick={onTutorial}>看图解教学</Button></div>}
         <section>
           <h3>一句话玩法</h3>
           <p>三人比牌，<b>第二名是输家（被"逮"）</b>，要分别付给头名和末位各一笔分。所以——要么拿最大，要么干脆最小，唯独别卡在中间。</p>
@@ -264,7 +273,7 @@ export function RulesModal({ onClose, onTutorial }: Close & { onTutorial?: () =>
           </ul>
         </section>
         <section>
-          <h3>场次与爵位</h3>
+          <h3>场次</h3>
           <div className="rule-tags">
             {HALLS.map((hall) => <span key={hall.id}>{hall.name} · 底注 {formatCoins(hall.stake)} · {formatCoins(hall.minCoins)} 入场</span>)}
           </div>
@@ -418,8 +427,8 @@ export function ProfileModal({ onClose }: Close) {
             <div><b className="num">{formatCoins(user.coins)}</b><small>金币</small></div>
             <div><b className="num">{user.games}</b><small>总局数</small></div>
             <div><b className="num">{winRate}%</b><small>头名率</small></div>
-            <div><b className="num">{user.caught}</b><small>被逮轮数</small></div>
-            <div><b className="num">{user.leopards}</b><small>豹子</small></div>
+            <div><b className="num">{user.caught}</b><small>逮二游被逮</small></div>
+            <div><b className="num">{user.leopards}</b><small>逮二游豹子</small></div>
             <div><b className="num">{formatCoins(user.bestWin)}</b><small>单局最高赢取</small></div>
           </div>
           <div className="modal-actions">

@@ -1,5 +1,6 @@
 // 前后端共享的数据结构与消息协议。
 import type { GameView, RoundResult } from './engine.ts'
+import type { GameId } from './games.ts'
 import type { MjOptions } from './mahjong/game.ts'
 import type { MjAction, MjLevel, MjView } from './mahjong/view.ts'
 
@@ -91,6 +92,9 @@ export interface RoomView {
 
 export interface LobbyRoom {
   id: string
+  game: GameId
+  /** 一桌几个座位 */
+  seats: number
   hallId: string
   stake: number
   status: RoomStatus
@@ -156,7 +160,7 @@ export interface FriendInfo {
   honor: number
   online: boolean
   /** 好友所在的公开牌桌（私密牌桌不显示） */
-  room: { id: string; status: RoomStatus; joinable: boolean } | null
+  room: { id: string; status: RoomStatus; joinable: boolean; game?: GameId } | null
 }
 
 export interface AdminUser {
@@ -204,6 +208,9 @@ export type ClientOp =
   | { op: 'play'; round: number; cardIds: string[] }
   | { op: 'emote'; key: string }
   | { op: 'mj:start'; hallId: string; level: MjLevel; options: MjOptions }
+  | { op: 'mj:match'; hallId: string }
+  | { op: 'mj:create'; hallId: string; isPrivate: boolean; level: MjLevel; options: MjOptions }
+  | { op: 'mj:begin' }
   | { op: 'mj:act'; action: MjAction }
   | { op: 'mj:next' }
   | { op: 'mj:leave' }

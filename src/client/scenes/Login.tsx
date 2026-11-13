@@ -70,17 +70,17 @@ export function Login() {
   }
 
   return (
-    <div className="scene login">
+    <div className={`scene login ${mode === 'register' ? 'is-register' : ''}`}>
       <div className="login-rays" />
       <Fan cards={LEFT_FAN} side="left" />
       <Fan cards={RIGHT_FAN} side="right" />
 
       <header className="login-brand">
-        <div className="brand-seal">金殿</div>
-        <h1 className="brand-title gold-text">逮二游</h1>
+        <div className="brand-seal">棋牌</div>
+        <h1 className="brand-title gold-text">金殿</h1>
         <p className="brand-sub">
           <i />
-          <span>争头名 · 守末位 · 唯独莫做第二</span>
+          <span>红中麻将 · 逮二游 · 约上好友开一桌</span>
           <i />
         </p>
       </header>

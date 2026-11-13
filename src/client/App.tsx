@@ -55,7 +55,7 @@ export function App() {
 
   const tableView = view ?? (shown === 'table' ? lastView.current : null)
   return (
-    <Stage>
+    <Stage compact={shown !== 'table'} allowTall={shown === 'login' || shown === 'boot'}>
       <div className={`cosmetics ${user?.cardback ? `cb-${user.cardback}` : ''}`}>
         <GoldDust count={shown === 'table' || shown === 'mahjong' ? 22 : 70} />
         {shown === 'login' && !user && <Login />}

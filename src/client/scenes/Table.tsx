@@ -611,7 +611,7 @@ export function Table({ room, live }: { room: RoomView; live: RoomView | null })
         />
       )}
       {modal === 'history' && <HistoryModal room={room} onClose={() => setModal(null)} />}
-      {modal === 'rules' && <RulesModal onClose={() => setModal(null)} />}
+      {modal === 'rules' && <RulesModal initial="d2y" onClose={() => setModal(null)} />}
       {modal === 'leave' && (
         <Modal title="离开牌桌" onClose={() => setModal(null)} width={520}>
           <p className="modal-lead">对局尚未结束。现在离开将由 AI 替你托管，<br />本局输赢仍会照常结算。</p>

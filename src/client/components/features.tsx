@@ -214,7 +214,7 @@ export function FriendsModal({ onClose }: Close) {
       </form>
       <div className="friends scroll">
         {!friends && <div className="empty">加载中…</div>}
-        {friends?.length === 0 && <div className="empty">还没有好友<br /><small>对局结束后可以把同桌玩家加为好友</small></div>}
+        {friends?.length === 0 && <div className="empty">还没有好友<br /><small>打完一局后，可以在结算页把同桌的人加为好友</small></div>}
         {friends?.map((friend) => (
           <div key={friend.id} className={`friend-row ${friend.online ? 'online' : ''}`}>
             <Avatar index={friend.avatar} size={44} frame={friend.frame} dim={!friend.online} />
@@ -503,14 +503,14 @@ export function Tutorial({ onClose }: Close) {
   const last = step === steps.length - 1
 
   return (
-    <Modal title="新手教学" onClose={finish} width={780}>
+    <Modal title="逮二游 · 图解教学" onClose={finish} width={780}>
       <div className="tutorial">
         <div className="tut-dots">{steps.map((_, index) => <i key={index} className={index === step ? 'on' : index < step ? 'done' : ''} />)}</div>
         <h3 key={step} className="tut-title gold-text">{current.title}</h3>
         <div key={`body-${step}`} className="tut-body">{current.body}</div>
         <div className="modal-actions">
           {step > 0 && <Button kind="ghost" size="md" onClick={() => setStep(step - 1)}>上一步</Button>}
-          <Button kind="gold" size="md" onClick={() => (last ? finish() : setStep(step + 1))}>{last ? '开始第一局' : '下一步'}</Button>
+          <Button kind="gold" size="md" onClick={() => (last ? finish() : setStep(step + 1))}>{last ? '知道了' : '下一步'}</Button>
         </div>
       </div>
     </Modal>

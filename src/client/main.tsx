@@ -7,5 +7,6 @@ import './styles/lobby.css'
 import './styles/table.css'
 import './styles/features.css'
 import './styles/mahjong.css'
+import './styles/platform.css'
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />)

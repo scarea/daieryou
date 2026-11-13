@@ -11,7 +11,7 @@ import { MahjongManager, MjTimings } from '../src/server/mahjong.ts'
 import { botAction } from '../src/server/mjBot.ts'
 import { SqliteStore } from '../src/server/sqliteStore.ts'
 
-const FAST: MjTimings = { diceMs: 5, diceExtraMs: 1, botMinMs: 1, botMaxMs: 2, claimMs: 1, idleMs: 60000 }
+const FAST: MjTimings = { diceMs: 5, diceExtraMs: 1, botMinMs: 1, botMaxMs: 2, claimMs: 1, turnMs: 400, claimTurnMs: 400, offlineMs: 5, matchMs: 40, idleMs: 60000 }
 
 function mulberry(seed: number) {
   let a = seed
@@ -161,4 +161,162 @@ test('AI 设置：API Key 加密保存，只回显掩码', async () => {
   // 服务器没配加密密钥时拒绝保存
   const noKey = await setup('')
   await assert.rejects(async () => await noKey.accounts.saveAiSettings(noKey.userId, { apiKey: 'sk-abcdef1234567890' }), /加密密钥/)
+})
+
+// ------------------------------ 真人联机 ------------------------------
+
+import { reviewRecord } from '../src/client/mahjong/review.ts'
+import { kindOf as tileKind } from '../src/shared/mahjong/tiles.ts'
+
+async function multi(count: number, timings: Partial<MjTimings> = {}) {
+  const accounts = new Accounts(new SqliteStore(':memory:'), 1000, '', 'k')
+  const views = new Map<string, MjView | null>()
+  const online = new Set<string>()
+  const hub = {
+    send(userId: string, event: ServerEvent) { if (event.ev === 'mj') views.set(userId, event.table) },
+    isOnline: (userId: string) => online.has(userId),
+  }
+  const mahjong = new MahjongManager(accounts, hub, { ...FAST, ...timings })
+  const users: string[] = []
+  for (let i = 0; i < count; i += 1) {
+    const { user } = await accounts.register({ username: `mj_user_${i}`, password: 'secret123' })
+    users.push(user.id)
+    online.add(user.id)
+  }
+  const view = (userId: string) => views.get(userId) as MjView
+  return { accounts, mahjong, users, view, online }
+}
+
+/** 让指定的真人都自动出牌，直到这一局结束 */
+async function playOut(mahjong: MahjongManager, players: string[], view: (id: string) => MjView) {
+  for (let guard = 0; guard < 6000; guard += 1) {
+    if (players.every((id) => !view(id) || view(id).phase === 'over')) return
+    let moved = false
+    for (const id of players) {
+      const table = view(id)
+      if (!table || table.phase === 'dice' || table.phase === 'waiting' || table.phase === 'over') continue
+      const actor = table.phase === 'claim' ? table.claimSeat : table.turn
+      if (actor !== 0) continue
+      const c = table.choices
+      const action = table.phase === 'claim' ? (c.kong ? { type: 'kong' as const } : { type: 'pass' as const })
+        : c.hu ? { type: 'hu' as const } : { type: 'discard' as const, tile: table.drawn ?? c.discards[0] }
+      await mahjong.act(id, action).catch(() => {})
+      moved = true
+    }
+    if (!moved) await sleep(2)
+  }
+  throw new Error('对局没有结束')
+}
+
+test('快速匹配：四名真人凑齐立即开局，各自视角正确，整局零和并分别结算', async () => {
+  const { accounts, mahjong, users, view } = await multi(4)
+  for (const id of users.slice(0, 3)) await mahjong.match(id, 'qingyun')
+  assert.equal(view(users[0]).phase, 'waiting')
+  assert.equal(view(users[0]).matching, true)
+  assert.equal(view(users[2]).seats.filter((seat) => !seat.empty).length, 3)
+  await mahjong.match(users[3], 'qingyun')
+  assert.equal(view(users[0]).phase, 'dice')
+  assert.equal(new Set(users.map((id) => view(id).roomId)).size, 1, '四人在同一桌')
+  assert.equal(mahjong.lobbyRooms().length, 0, '匹配桌不出现在大厅列表')
+
+  await sleep(40)
+  // 每个人都看到自己在 0 号位、拿着自己的 13 或 14 张牌，且四人手牌互不重复
+  const hands = users.map((id) => view(id).hand)
+  assert.ok(hands.every((hand) => hand.length === 13 || hand.length === 14))
+  assert.equal(new Set(hands.flat()).size, hands.flat().length)
+  users.forEach((id) => {
+    const table = view(id)
+    assert.equal(table.seats[0].userId, id)
+    assert.ok(table.seats.slice(1).every((seat) => seat.hand === null && seat.userId !== id))
+  })
+  // 同一时刻只有一个人看到"轮到我"，并且大家对庄家是谁的看法一致
+  assert.equal(users.filter((id) => view(id).turn === 0).length, 1)
+  const dealerNames = users.map((id) => view(id).seats[view(id).dealer].name)
+  assert.equal(new Set(dealerNames).size, 1)
+
+  await playOut(mahjong, users, view)
+  const scores = users.map((id) => view(id).seats[0].score)
+  assert.equal(scores.reduce((sum, value) => sum + value, 0), 0, `四人分数零和 ${scores.join(' / ')}`)
+  for (const id of users) {
+    const table = view(id)
+    assert.equal(table.settlement!.coinsDelta, table.seats[0].score * HALLS[0].stake)
+    assert.equal((await accounts.profile(id)).coins, START_COINS + table.settlement!.coinsDelta)
+    // 各自拿到的牌谱都以自己为 0 号位，可以重放并复盘
+    const review = reviewRecord(table.record!)
+    assert.ok(review.discards.every((item) => item.hand.every((tile) => tileKind(tile) >= 0)))
+    assert.equal(table.record!.names[0], table.seats[0].name)
+  }
+  const winners = users.map((id) => view(id).result!.winner >= 0 ? view(id).seats[view(id).result!.winner].name : '流局')
+  assert.equal(new Set(winners).size, 1, '大家看到的赢家是同一个人')
+
+  // 下一局：要四个人都点了才发牌
+  await mahjong.next(users[0])
+  assert.equal(view(users[0]).phase, 'over')
+  assert.equal(view(users[1]).seats.find((seat) => seat.userId === users[0])!.ready, true)
+  for (const id of users.slice(1)) await mahjong.next(id)
+  assert.equal(view(users[0]).handNo, 2)
+  assert.notEqual(view(users[0]).phase, 'over')
+  mahjong.shutdown()
+})
+
+test('好友约局：房号加入、房主开始时机器人补位、大厅可见', async () => {
+  const { mahjong, users, view } = await multi(3)
+  await mahjong.create(users[0], 'qingyun', false, 'hard', DEFAULT_OPTIONS)
+  const roomId = view(users[0]).roomId
+  assert.match(roomId, /^9\d{5}$/)
+  assert.equal(mahjong.lobbyRooms().length, 1)
+  assert.equal(mahjong.lobbyRooms()[0].game, 'mahjong')
+  await mahjong.join(users[1], roomId)
+  assert.equal(view(users[0]).seats.filter((seat) => !seat.empty).length, 2)
+  assert.equal(view(users[1]).hostSeat !== 0, true)
+  await assert.rejects(async () => await mahjong.beginByHost(users[1]), /房主/)
+  await assert.rejects(async () => await mahjong.join(users[2], '900000'), /不存在/)
+  await mahjong.beginByHost(users[0])
+  assert.equal(view(users[1]).phase, 'dice')
+  assert.equal(view(users[1]).seats.filter((seat) => seat.isBot).length, 2, '空位由机器人补齐')
+  await assert.rejects(async () => await mahjong.join(users[2], roomId), /已经开打/)
+  assert.deepEqual(mahjong.publicRoomOf(users[1]), { id: roomId, status: 'playing', joinable: false, game: 'mahjong' })
+  mahjong.shutdown()
+})
+
+test('超时自动出牌、掉线托管、中途离开照常结算', async () => {
+  const { accounts, mahjong, users, view, online } = await multi(2, { turnMs: 30, claimTurnMs: 30 })
+  await mahjong.create(users[0], 'qingyun', true, 'normal', DEFAULT_OPTIONS)
+  await mahjong.join(users[1], view(users[0]).roomId)
+  await mahjong.beginByHost(users[0])
+  await sleep(30)
+  assert.ok(view(users[0]).deadlineAt === null || view(users[0]).deadlineAt! > 0)
+  // 两个人都不操作：靠超时也能把牌打下去
+  const before = view(users[0]).wallCount
+  await sleep(400)
+  assert.ok(view(users[0]).wallCount < before || view(users[0]).phase === 'over', '超时后自动出牌，牌局在推进')
+
+  // 1 号掉线：座位显示托管，由机器人代打
+  online.delete(users[1])
+  mahjong.onDisconnect(users[1])
+  await sleep(20)
+  if (view(users[0]).phase !== 'over') {
+    const seat = view(users[0]).seats.find((item) => item.userId === users[1])!
+    assert.equal(seat.trustee, true)
+  }
+  // 0 号中途离开：桌上没有在线真人也要把这局打完并结算
+  await mahjong.leave(users[0])
+  assert.equal(view(users[0]), null)
+  await sleep(50)
+  online.add(users[1])
+  mahjong.onConnect(users[1])
+  for (let guard = 0; guard < 3000 && view(users[1]) && view(users[1]).phase !== 'over'; guard += 1) await sleep(5)
+  const final = view(users[1])
+  assert.ok(final, '1 号重连后还在桌上')
+  assert.equal(final.phase, 'over')
+  assert.equal((await accounts.profile(users[0])).games, 1, '离开的人这一局照常结算')
+  assert.equal((await accounts.profile(users[1])).games, 1)
+  const a = (await accounts.profile(users[0])).coins - START_COINS
+  const b = (await accounts.profile(users[1])).coins - START_COINS
+  assert.equal(b, final.seats[0].score * HALLS[0].stake)
+  assert.equal(final.seats.reduce((sum, seat) => sum + seat.score, 0), 0, '四家分数零和')
+  // 离开的人按他那个座位的分数结算
+  assert.ok(final.seats.some((seat) => seat.score * HALLS[0].stake === a))
+  assert.ok(final.seats.every((seat) => seat.userId !== users[0]), '离开的人的座位结算后交给机器人')
+  mahjong.shutdown()
 })

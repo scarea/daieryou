@@ -61,6 +61,11 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
   }
   const rooms = new RoomManager(accounts, hub, options.timings)
   const mahjong = new MahjongManager(accounts, hub, options.mjTimings)
+  // 两个游戏的牌桌服务互相打通：大厅列表合并、房号不重复、一个人只在一张桌上
+  rooms.extraLobbyRooms = () => mahjong.lobbyRooms()
+  rooms.busyElsewhere = (userId) => mahjong.has(userId)
+  mahjong.onLobbyChange = () => rooms.refreshLobby()
+  mahjong.idTaken = (id) => rooms.hasRoom(id)
 
   // ------------------------------ HTTP ------------------------------
 
@@ -160,7 +165,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
       const user = await requireAuth(request)
       const friends: FriendInfo[] = (await store.listFriends(user.id)).map((row) => ({
         id: row.id, nickname: row.nickname, avatar: row.avatar, frame: row.frame || '', honor: row.honor,
-        online: connections.has(row.id), room: rooms.publicRoomOf(row.id),
+        online: connections.has(row.id), room: mahjong.publicRoomOf(row.id) ?? rooms.publicRoomOf(row.id),
       }))
       friends.sort((a, b) => Number(b.online) - Number(a.online))
       return { friends }
@@ -232,12 +237,18 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
     // 麻将桌与扑克房间互斥：一次只能在一张桌上
     if (message.op.startsWith('mj:')) {
       if (rooms.roomOf(userId)) throw new AppError('请先离开当前的牌桌')
-    } else if (mahjong.has(userId) && ['quick', 'create', 'join', 'match', 'spectate'].includes(message.op)) {
+    } else if (mahjong.has(userId) && ['quick', 'create', 'match', 'spectate'].includes(message.op)) {
       throw new AppError('请先离开麻将桌')
     }
     switch (message.op) {
       case 'mj:start':
         return mahjong.start(userId, String(message.hallId), message.level, message.options)
+      case 'mj:match':
+        return mahjong.match(userId, String(message.hallId))
+      case 'mj:create':
+        return mahjong.create(userId, String(message.hallId), Boolean(message.isPrivate), message.level, message.options)
+      case 'mj:begin':
+        return mahjong.beginByHost(userId)
       case 'mj:act':
         return mahjong.act(userId, message.action)
       case 'mj:next':
@@ -250,8 +261,16 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
         return rooms.quick(userId, String(message.hallId), message.botLevel)
       case 'create':
         return rooms.create(userId, String(message.hallId), Boolean(message.isPrivate))
-      case 'join':
-        return rooms.join(userId, String(message.roomId))
+      case 'join': {
+        // 房号在哪个游戏的牌桌服务里，就交给谁
+        const roomId = String(message.roomId).trim()
+        if (mahjong.hasRoom(roomId)) {
+          if (rooms.roomOf(userId)) throw new AppError('请先离开当前的牌桌')
+          return mahjong.join(userId, roomId)
+        }
+        if (mahjong.has(userId)) throw new AppError('请先离开麻将桌')
+        return rooms.join(userId, roomId)
+      }
       case 'match':
         return rooms.match(userId, String(message.hallId))
       case 'spectate':
@@ -342,6 +361,7 @@ export function createApp(store: Store, options: { hashIterations?: number; timi
       if (userId && connections.get(userId) === connection) {
         connections.delete(userId)
         void rooms.onDisconnect(userId).catch(() => {})
+        mahjong.onDisconnect(userId)
       }
     }
 
