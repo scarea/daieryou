@@ -54,7 +54,10 @@ export function Liuhu({ table }: { table: LhView }) {
   const [busy, setBusy] = useState(false)
   const [added, setAdded] = useState<string[]>([])
   const [now, setNow] = useState(Date.now())
-  const drag = useRef<{ tile: number; x: number; y: number } | null>(null)
+  const drag = useRef<{ tile: number; x: number; y: number; moved: boolean } | null>(null)
+  const columnsRef = useRef<HTMLDivElement>(null)
+  /** 正在拖着理牌的那张牌，以及它要落到哪一列（left / right 表示在两头另起一列） */
+  const [dragging, setDragging] = useState<{ tile: number; target: number | 'left' | 'right' | null } | null>(null)
   const { rotated } = useStage()
   const practice = table.mode === 'practice'
   const playing = table.phase === 'discard' || table.phase === 'claim' || table.phase === 'over'
@@ -171,7 +174,20 @@ export function Liuhu({ table }: { table: LhView }) {
   }, [table.phase, table.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------ 手牌、听牌与教练 ------------------------------
-  const columns = useMemo(() => arrangeHand(table.hand), [table.hand])
+  // 手牌的列：默认自动理好，玩家可以自己拖着调整；打出 / 吃碰用掉的牌从原来的列里拿走
+  const [columns, setColumns] = useState<number[][]>(() => arrangeHand(table.hand))
+  const handKey = table.hand.join(',')
+  useEffect(() => {
+    setColumns((current) => {
+      const have = new Set(table.hand)
+      const kept = current.map((column) => column.filter((tile) => have.has(tile))).filter((column) => column.length > 0)
+      const known = new Set(kept.flat())
+      const fresh = table.hand.filter((tile) => !known.has(tile))
+      if (kept.length === 0 || fresh.length > 0) return arrangeHand(table.hand)
+      return kept
+    })
+  }, [handKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setColumns(arrangeHand(table.hand)), [table.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
   const waiting = useMemo(() => {
     if (!playing || table.phase === 'over' || canDiscard || table.hand.length === 0) return null
     return waitsOf(me.melds, table.hand)
@@ -203,18 +219,68 @@ export function Liuhu({ table }: { table: LhView }) {
     if (!table.choices.discards.includes(tile)) return toast('起手的坎不能拆着打', 'error')
     void act({ type: 'discard', tile })
   }
-  const onTileDown = (event: PointerEvent, tile: number) => {
-    if (!canDiscard) return
-    drag.current = { tile, x: event.clientX, y: event.clientY }
+  /** 指针落在哪一列上；超出两头则是另起一列 */
+  const locate = (clientX: number, clientY: number): number | 'left' | 'right' | null => {
+    const items = [...(columnsRef.current?.children ?? [])].map((element) => element.getBoundingClientRect())
+    if (items.length === 0) return null
+    const at = rotated ? clientY : clientX
+    const center = (box: DOMRect) => (rotated ? box.top + box.height / 2 : box.left + box.width / 2)
+    const size = rotated ? items[0].height : items[0].width
+    const direction = items.length > 1 && center(items[items.length - 1]) < center(items[0]) ? -1 : 1
+    let nearest = 0
+    items.forEach((box, index) => { if (Math.abs(center(box) - at) < Math.abs(center(items[nearest]) - at)) nearest = index })
+    const offset = (at - center(items[nearest])) * direction
+    if (nearest === 0 && offset < -size * 0.7) return 'left'
+    if (nearest === items.length - 1 && offset > size * 0.7) return 'right'
+    return nearest
+  }
+  const onTileDown = (event: PointerEvent<HTMLButtonElement>, tile: number) => {
+    drag.current = { tile, x: event.clientX, y: event.clientY, moved: false }
+    try {
+      // 拖出这张牌的范围后，移动和松手仍然交给它
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // ignore
+    }
+  }
+  const onTileMove = (event: PointerEvent) => {
+    const start = drag.current
+    if (!start) return
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    const side = Math.abs(rotated ? dy : dx)
+    // 横着拖是理牌，往上甩是打牌
+    if (!start.moved && side > 16 && side > Math.abs(stageUp(rotated, dx, dy)) * 1.2) start.moved = true
+    if (start.moved) setDragging({ tile: start.tile, target: locate(event.clientX, event.clientY) })
   }
   const onTileUp = (event: PointerEvent, tile: number) => {
-    if (!canDiscard) return
     const start = drag.current
     drag.current = null
+    if (start?.moved) {
+      const target = locate(event.clientX, event.clientY)
+      setDragging(null)
+      setColumns((current) => {
+        const from = current.findIndex((column) => column.includes(tile))
+        if (from < 0 || target === null || target === from) return current
+        if (typeof target === 'number' && current[target].length >= 4) return current
+        const next = current.map((column) => column.filter((item) => item !== tile))
+        if (target === 'left') next.unshift([tile])
+        else if (target === 'right') next.push([tile])
+        else next[target].push(tile)
+        return next.filter((column) => column.length > 0)
+      })
+      sfx.tilePick()
+      return
+    }
+    if (!canDiscard) return
     if (start && start.tile === tile && stageUp(rotated, event.clientX - start.x, event.clientY - start.y) > 40) return discard(tile)
     if (selected === tile) return discard(tile)
     sfx.tilePick()
     setSelected(tile)
+  }
+  const tidy = () => {
+    sfx.click()
+    setColumns(arrangeHand(table.hand))
   }
   const toggleCoach = () => {
     const next = !coach
@@ -325,9 +391,9 @@ export function Liuhu({ table }: { table: LhView }) {
       {playing && !(table.phase === 'over' && resultStage >= 1) && (
         <div className={`lh-hand ${canDiscard ? 'live' : ''}`}>
           {me.melds.length > 0 && <div className="lh-my-melds">{me.melds.map((meld, index) => <MeldColumn key={index} meld={meld} size="m" />)}</div>}
-          <div className="lh-columns">
-            {columns.map((column) => (
-              <div key={column[0]} className="lh-column">
+          <div ref={columnsRef} className={`lh-columns ${dragging && typeof dragging.target === 'string' ? `to-${dragging.target}` : ''}`}>
+            {columns.map((column, at) => (
+              <div key={column[0]} className={`lh-column ${dragging && dragging.target === at && !column.includes(dragging.tile) ? 'target' : ''}`}>
                 {column.map((tile) => {
                   const kind = lhKind(tile)
                   const blocked = canDiscard && !table.choices.discards.includes(tile)
@@ -337,9 +403,11 @@ export function Liuhu({ table }: { table: LhView }) {
                     <button
                       key={tile}
                       type="button"
-                      className={`lh-card ${selected === tile ? 'selected' : ''} ${blocked ? 'blocked' : ''} ${best ? 'best' : ''}`}
+                      className={`lh-card ${dragging?.tile === tile ? 'dragging' : ''} ${selected === tile ? 'selected' : ''} ${blocked ? 'blocked' : ''} ${best ? 'best' : ''}`}
                       onPointerDown={(event) => onTileDown(event, tile)}
+                      onPointerMove={onTileMove}
                       onPointerUp={(event) => onTileUp(event, tile)}
+                      onPointerCancel={() => { drag.current = null; setDragging(null) }}
                       onDoubleClick={() => discard(tile)}
                     >
                       <Zi kind={kind} className="h" />
@@ -353,10 +421,13 @@ export function Liuhu({ table }: { table: LhView }) {
         </div>
       )}
 
+      {playing && table.phase !== 'over' && <button type="button" className="mj-switch lh-tidy" onClick={tidy} title="恢复自动理牌">理牌</button>}
+
       {/* ------------------------------ 提示条 ------------------------------ */}
       {playing && table.phase !== 'over' && (
         <div className="lh-status">
           {canDiscard && <b>轮到你打牌{selected !== null ? ' · 再点一下打出' : ' · 点牌选中，再点打出（或往上甩）'}</b>}
+          {!myClaim && <span>左右拖动可以自己理牌</span>}
           {myClaim && <b>{table.choices.hu ? '可以胡了！' : table.choices.peng ? '要不要碰？放过就成臭牌' : '要不要吃？放过就成臭牌'}</b>}
           {!myMove && table.actor >= 0 && <span>等 {table.seats[table.actor].name} {table.phase === 'discard' ? '打牌' : '表态'}…</span>}
           {waiting && waiting.length > 0 && (
