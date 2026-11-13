@@ -3,10 +3,12 @@
 // 流程：
 //  - 4 人，80 张字牌。庄家 15 张（最后一张亮出，叫挡底），闲家 14 张。
 //  - 庄家起手有提（四张）当场亮出，然后打一张；闲家的提要等到自己摸牌的回合才亮。
-//  - 之后轮流从墩上摸牌。摸的牌不入手：先亮出来，
-//      摸牌的人能胡可以胡 → 能提 / 跑 / 笑必须做 → 别家能胡可以胡 → 别家能跑必须跑
-//      → 别家可以碰 → 摸牌的人、他的下家可以吃 → 都不要就放到摸牌人的右手边，下家接着摸。
-//  - 打出的牌：别家能胡可以胡（放炮）→ 能跑必须跑 → 可以碰 → 下家可以吃。
+//  - 之后轮流从墩上摸牌。摸的牌不入手：先亮出来。抢牌的先后固定是 胡 > 碰 > 吃：
+//      自己摸到能提 / 跑 / 笑的牌是必须做的动作，不参与抢牌（自己能胡可以先胡）；
+//      否则各家按顺序能胡可以胡 → 能跑必须跑、可以碰 → 摸牌的人、他的下家可以吃
+//      → 都不要就放到摸牌人的右手边，下家接着摸。
+//  - 打出的牌：别家能胡可以胡（放炮）→ 能跑必须跑、可以碰 → 下家可以吃。
+//  - 自己打过的牌不能再吃（别人后来打出、自己后来摸到都不行），但可以胡。
 //  - 吃 / 碰 / 笑之后必须打一张。第一次提 / 跑打一张，之后的"重跑"不打。
 //  - 想吃没吃、能碰没碰，这张牌就成了自己的臭牌，之后不能再吃 / 碰同样的牌。
 //  - 墩上的牌摸完没人胡：荒庄，庄家连庄。
@@ -28,7 +30,7 @@ export interface LhPlayer {
   melds: LhMeld[]
   /** 右手边的牌：自己打出的、自己摸出来没人要的 */
   discards: number[]
-  /** 臭牌：放弃过吃 / 碰的牌种 */
+  /** 臭牌：放弃过吃 / 碰的牌种；自己打过的牌也不能再吃 */
   stinkChi: number[]
   stinkPeng: number[]
   score: number
@@ -51,6 +53,23 @@ export type LhEvent =
   | { t: 'drop'; seat: number; tile: number }
   | { t: 'hu'; seat: number; from: number }
   | { t: 'drawn-game' }
+
+/** 一次决定的记录（复盘用）：当时的手牌、桌上的牌、能做什么、做了什么 */
+export interface LhDecision {
+  seat: number
+  hand: number[]
+  melds: { type: GroupType; kinds: number[]; hu: number }[]
+  /** 表态时桌上那张牌；打牌时为 -1 */
+  tile: number
+  from: number
+  source: 'open' | 'draw' | 'discard' | ''
+  can: { hu: boolean; peng: boolean; chi: number[][][] }
+  act: LhAction['type']
+  /** 打出的牌（id）或选的吃法序号；其余为 -1 */
+  out: number
+  /** 打出的是不是生牌（各家右手边都还没出现过） */
+  fresh: boolean
+}
 
 export type WinKind = 'zimo' | 'pao' | 'gong'
 
@@ -103,6 +122,7 @@ export interface LhState {
   result: LhResult | null
   init: { hands: number[][]; wall: number[]; dealer: number }
   events: LhEvent[]
+  log: LhDecision[]
 }
 
 // ------------------------------ 定庄 ------------------------------
@@ -168,6 +188,7 @@ export function fromHands(hands: number[][], wall: number[], dealer: number, rul
     result: null,
     init: { hands: hands.map((hand) => [...hand]), wall: [...wall], dealer },
     events: [],
+    log: [],
   }
   const bottom = hands[dealer][hands[dealer].length - 1]
   state.events.push({ t: 'open', seat: dealer, tile: bottom })
@@ -423,10 +444,33 @@ export function applyLiuhu(state: LhState, seat: number, action: LhAction): void
   const choices = choicesFor(state, seat)
   const player = state.players[seat]
   const pending = state.pending
+  const claim = state.phase === 'claim' && pending
+  const kindOut = action.type === 'discard' ? lhKind(action.tile) : -1
+  const entry: LhDecision = {
+    seat,
+    hand: [...player.hand],
+    melds: player.melds.map((item) => ({ type: item.type, kinds: item.tiles.map(lhKind), hu: item.hu })),
+    tile: claim ? pending.tile : -1,
+    from: claim ? pending.from : -1,
+    source: claim ? pending.source : '',
+    can: { hu: choices.hu, peng: choices.peng, chi: choices.chi.map((option) => option.groups) },
+    act: action.type,
+    out: action.type === 'discard' ? action.tile : action.type === 'chi' ? action.option : -1,
+    fresh: kindOut >= 0 && !state.players.some((other) => other.discards.some((tile) => lhKind(tile) === kindOut)),
+  }
+  perform(state, seat, action, choices)
+  state.log.push(entry)
+}
+
+function perform(state: LhState, seat: number, action: LhAction, choices: LhChoices): void {
+  const player = state.players[seat]
+  const pending = state.pending
   switch (action.type) {
     case 'discard': {
       if (!choices.discards.includes(action.tile)) throw new Error('不能打这张牌')
       player.hand.splice(player.hand.indexOf(action.tile), 1)
+      // 自己打过的牌不能再吃
+      if (!player.stinkChi.includes(lhKind(action.tile))) player.stinkChi.push(lhKind(action.tile))
       state.events.push({ t: 'discard', seat, tile: action.tile })
       expose(state, action.tile, seat, 'discard')
       return

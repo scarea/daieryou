@@ -551,7 +551,7 @@ export class LiuhuManager {
           total: scores[index], caught: 0, leopards: 0,
         })),
         [],
-        { matchId, game: 'liuhu', label: '六胡抢', summary: this.summary(table) },
+        { matchId, game: 'liuhu', label: '六胡抢', summary: this.summary(table), record: { log: state.log, names: seats.map((seat) => seat.name), level: table.level } },
       )
       for (const entry of entries) {
         const seat = seats[entry.seat]
@@ -669,6 +669,9 @@ export class LiuhuManager {
       settlement: mySeat ? table.settlements.get(mySeat.userId) ?? null : null,
       seq: table.seq,
       lastEvent: event ? relEvent(event) : null,
+      record: over && state
+        ? { decisions: state.log.filter((item) => item.seat === my).map((item) => ({ ...item, seat: 0, from: rel(item.from) })), level: table.level }
+        : null,
     }
   }
 }

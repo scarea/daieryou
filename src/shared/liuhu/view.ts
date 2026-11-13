@@ -1,5 +1,5 @@
 // 六胡抢：前后端共享的牌桌视图。所有座位号都换算成以"我"为 0 号位（我在下方，1 右、2 对家、3 左）。
-import type { FlipRound, LhAction, LhChoices, LhEvent, LhMeld, LhResult } from './game.ts'
+import type { FlipRound, LhAction, LhChoices, LhDecision, LhEvent, LhMeld, LhResult } from './game.ts'
 
 export type LhLevel = 'easy' | 'normal' | 'hard' | 'master'
 
@@ -71,6 +71,14 @@ export interface LhView {
   settlement: LhSettlement | null
   seq: number
   lastEvent: LhEvent | null
+  /** 结束后附带我这一局的每一次决定，供复盘 */
+  record: LhRecord | null
+}
+
+export interface LhRecord {
+  /** 我的每一次决定（座位已换算成以我为 0 号位） */
+  decisions: LhDecision[]
+  level: LhLevel
 }
 
 export type { LhAction }

@@ -285,3 +285,27 @@ test('随机对局：牌不多不少、分数零和、总能打完', () => {
   }
   assert.ok(wins > 40, `随机乱打也该有人胡：${wins}`)
 })
+
+test('自己打过的牌不能再吃；决定都记进牌谱', () => {
+  const state = table([
+    '九 九 三四五 六七八 壹贰叁 陆 拾 肆 十',
+    '九九 一 三 五 七 贰 肆 陆 捌 拾 十 叁 伍',
+  ])
+  const nine = state.players[0].hand.find((item) => lhKind(item) === 8) as number
+  applyLiuhu(state, 0, { type: 'discard', tile: nine })
+  assert.ok(state.players[0].stinkChi.includes(8))
+  const first = state.log[0]
+  assert.equal(first.seat, 0)
+  assert.equal(first.act, 'discard')
+  assert.equal(first.out, nine)
+  assert.equal(first.fresh, true)
+  assert.equal(first.hand.length, 15)
+  // 1 号位可以碰：记录里带着当时能做的事
+  applyLiuhu(state, 1, { type: 'pass' })
+  assert.equal(state.log[1].can.peng, true)
+  assert.equal(state.log[1].tile, nine)
+  // 非法操作不记
+  const before = state.log.length
+  assert.throws(() => applyLiuhu(state, actorOf(state), { type: 'discard', tile: 999 }))
+  assert.equal(state.log.length, before)
+})

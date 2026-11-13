@@ -146,3 +146,21 @@ test('六胡抢机器人：四档都能把牌打完，高手以上胜率不输�
   assert.ok(master + easy > 60, `大多数牌局应该有人胡：${master + easy}，荒庄 ${drawn}`)
   assert.ok(master > easy, `大师 ${master} 应多于入门 ${easy}`)
 })
+
+test('六胡抢复盘：结束后带上我的决定记录，复盘数据能算出来', async () => {
+  const { reviewLiuhu, lhReviewPrompt } = await import('../src/client/liuhu/review.ts')
+  const { liuhu, ids, view } = await setup(['lh_review'])
+  await liuhu.start(ids[0], 'qingyun', 'normal')
+  await autoplay(liuhu, ids, view)
+  const over = view(ids[0])!
+  assert.ok(over.record)
+  assert.ok(over.record!.decisions.every((item) => item.seat === 0))
+  const review = reviewLiuhu(over.record!, over.result)
+  assert.equal(review.discards.length, over.record!.decisions.filter((item) => item.act === 'discard').length)
+  assert.ok(review.accuracy >= 0 && review.accuracy <= 1)
+  const prompt = lhReviewPrompt(over.record!, review, '测试')
+  assert.match(prompt, /常宁六胡抢/)
+  assert.ok(prompt.length > 20 && prompt.length <= 11000)
+  await liuhu.leave(ids[0])
+  liuhu.shutdown()
+})

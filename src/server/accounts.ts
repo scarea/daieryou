@@ -477,9 +477,9 @@ export class Accounts {
     const text = String(analysis ?? '')
     if (text.length < 20 || text.length > 12000) throw new AppError('复盘数据无效')
     const detail = await this.store.getMatchDetail(String(matchId), userId)
-    if (!detail || detail.game !== 'mahjong') throw new AppError('没有找到这一局牌')
+    if (!detail || (detail.game !== 'mahjong' && detail.game !== 'liuhu')) throw new AppError('没有找到这一局牌')
     const { apiKey, model } = await this.aiCredentials(userId)
-    return coachReview(apiKey, model, text)
+    return coachReview(apiKey, model, text, detail.game)
   }
 
   static readonly aiModels = AI_MODELS

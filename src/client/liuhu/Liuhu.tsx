@@ -2,7 +2,8 @@
 import { PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCoins, hallById } from '../../shared/economy.ts'
 import type { LhAction, LhMeld } from '../../shared/liuhu/game.ts'
-import { GROUP_NAME, checkWin } from '../../shared/liuhu/hand.ts'
+import { waitsOf } from '../../shared/liuhu/eval.ts'
+import { GROUP_NAME } from '../../shared/liuhu/hand.ts'
 import { lhKind, lhName } from '../../shared/liuhu/tiles.ts'
 import { LH_LEVEL_NAME, LhView } from '../../shared/liuhu/view.ts'
 import { stageUp, useStage } from '../components/Stage.tsx'
@@ -10,6 +11,7 @@ import { Avatar, Button, Coins, CountUp, Modal, MusicToggle, SoundToggle } from 
 import { api } from '../net.ts'
 import { useStore } from '../store.ts'
 import { sfx, voice } from '../sound.ts'
+import { LhReviewModal } from './LhReviewModal.tsx'
 import { LiuhuRules } from './LiuhuRules.tsx'
 import { Zi, arrangeHand } from './Zi.tsx'
 
@@ -37,13 +39,6 @@ function MeldColumn({ meld, size }: { meld: LhMeld; size: string }) {
   )
 }
 
-/** 现在这手牌在等哪些牌（按别人打出来算，最保守） */
-function waitsOf(melds: LhMeld[], hand: number[]): number[] {
-  const kinds: number[] = []
-  for (let kind = 0; kind < 20; kind += 1) if (checkWin(melds, hand, kind * 4, false)) kinds.push(kind)
-  return kinds
-}
-
 export function Liuhu({ table }: { table: LhView }) {
   const send = useStore((state) => state.send)
   const user = useStore((state) => state.user)!
@@ -51,7 +46,7 @@ export function Liuhu({ table }: { table: LhView }) {
   const [selected, setSelected] = useState<number | null>(null)
   const [coach, setCoach] = useState(() => readFlag(COACH_KEY, true))
   const [voiceOn, setVoiceOn] = useState(voice.isOn())
-  const [modal, setModal] = useState<'rules' | 'leave' | null>(null)
+  const [modal, setModal] = useState<'rules' | 'leave' | 'review' | null>(null)
   const [burst, setBurst] = useState<{ seat: number; text: string; key: number } | null>(null)
   const [chiOpen, setChiOpen] = useState(false)
   const [resultStage, setResultStage] = useState(0)
@@ -539,6 +534,7 @@ export function Liuhu({ table }: { table: LhView }) {
                 <div className="result-actions">
                   <Button kind="ghost" size="md" onClick={() => void leave()}>离开</Button>
                   <Button kind="gold" size="lg" disabled={me.ready} onClick={() => void send({ op: 'lh:next' })}>{me.ready ? '等其他人准备…' : '下一局'}</Button>
+                  <Button kind="jade" size="md" disabled={!table.record || !table.settlement} onClick={() => setModal('review')}>复盘这一局</Button>
                 </div>
               </>
             )}
@@ -546,6 +542,17 @@ export function Liuhu({ table }: { table: LhView }) {
         </div>
       )}
 
+      {modal === 'review' && table.record && table.settlement && (
+        <LhReviewModal
+          record={table.record}
+          result={result}
+          matchId={table.settlement.matchId}
+          outcome={!result || result.winner < 0 ? `荒庄，我本局 ${me.score} 分`
+            : result.winner === 0 ? `我${KIND_TITLE[result.kind]}，${result.hu} 胡 · ${result.redName}，本局 +${me.score} 分`
+              : `${winner?.name} ${KIND_TITLE[result.kind]}（${result.hu} 胡）${result.loser === 0 ? '，是我放的炮' : ''}，我本局 ${me.score} 分`}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal === 'rules' && <LiuhuRules onClose={() => setModal(null)} />}
       {modal === 'leave' && (
         <Modal title="离开牌桌" onClose={() => setModal(null)} width={520}>

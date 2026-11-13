@@ -1,67 +1,10 @@
 // 六胡抢机器人：四档难度。
 // 摸牌不入手，手牌只减不增，所以关键是：留住能成门子的搭子、吃碰要有取舍、别放炮（放炮一人赔三份）。
 import { LhAction, LhPlayer, LhState, choicesFor, lhVisible } from '../shared/liuhu/game.ts'
-import { ChiOption, chiGroup, groupHu } from '../shared/liuhu/hand.ts'
-import { LH_KINDS, lhCounts, lhIsBig, lhKind, lhRank, lhTwin } from '../shared/liuhu/tiles.ts'
+import { GROUP, HU, chiCost, handValue } from '../shared/liuhu/eval.ts'
+import { groupHu } from '../shared/liuhu/hand.ts'
+import { lhCounts, lhKind } from '../shared/liuhu/tiles.ts'
 import type { LhLevel } from '../shared/liuhu/view.ts'
-
-const GROUP = 10
-const HU = 1.3
-
-/** 一手散牌的价值：成型的门子、差一张的搭子、对子，以及它们带的胡数 */
-function handValue(counts: number[]): number {
-  const cache = new Map<string, number>()
-  const locked = counts.map((count) => count >= 3)
-  const search = (): number => {
-    let kind = 0
-    while (kind < LH_KINDS && counts[kind] === 0) kind += 1
-    if (kind === LH_KINDS) return 0
-    const key = counts.join('')
-    const known = cache.get(key)
-    if (known !== undefined) return known
-    const base = lhIsBig(kind) ? 10 : 0
-    const rank = lhRank(kind)
-    const at = (r: number) => (r >= 1 && r <= 10 && !locked[base + r - 1] ? counts[base + r - 1] : 0)
-    let best = 0
-    const use = (kinds: number[], value: number) => {
-      for (const item of kinds) counts[item] -= 1
-      best = Math.max(best, value + search())
-      for (const item of kinds) counts[item] += 1
-    }
-    if (locked[kind]) {
-      // 坎 / 提：整门拿走
-      const size = counts[kind]
-      counts[kind] = 0
-      best = GROUP + groupHu(size === 4 ? 'ti' : 'kan', [kind]) * HU + search()
-      counts[kind] = size
-      cache.set(key, best)
-      return best
-    }
-    // 单张留着
-    use([kind], 0)
-    // 顺子与差一张的顺子搭子
-    if (at(rank + 1) && at(rank + 2)) use([kind, kind + 1, kind + 2], GROUP + (rank === 1 ? groupHu('seq', [kind, kind + 1, kind + 2]) : 0) * HU)
-    if (at(rank + 1)) use([kind, kind + 1], rank === 1 || rank === 2 ? 4.5 : 4)
-    if (at(rank + 2)) use([kind, kind + 2], 3)
-    // 二七十
-    if (rank === 2 && at(7) && at(10)) use([kind, base + 6, base + 9], GROUP + groupHu('ershi', [kind]) * HU)
-    if (rank === 2 && at(7)) use([kind, base + 6], 3.5)
-    if (rank === 2 && at(10)) use([kind, base + 9], 3.5)
-    if (rank === 7 && at(10)) use([kind, base + 9], 3.5)
-    // 对子：能碰、能笑、能做将
-    if (counts[kind] >= 2) use([kind, kind], 5.5 + (lhIsBig(kind) ? 1 : 0))
-    // 搭
-    const twin = lhTwin(kind)
-    if (twin > kind && !locked[twin] && counts[twin] > 0) {
-      if (counts[kind] >= 2) use([kind, kind, twin], GROUP)
-      if (counts[twin] >= 2) use([kind, twin, twin], GROUP)
-      use([kind, twin], 3)
-    }
-    cache.set(key, best)
-    return best
-  }
-  return search()
-}
 
 /** 打这张牌有多危险：没人打过、场上见得少的"生牌"最容易放炮 */
 function danger(state: LhState, seat: number, kind: number, level: LhLevel): number {
@@ -103,18 +46,6 @@ function afterTake(state: LhState, seat: number, removed: number[], gained: numb
   return gained + bestDiscard(state, seat, shadow, tiles, level, random).value
 }
 
-function chiValue(option: ChiOption, tileKind: number): { removed: number[]; gained: number } {
-  const removed: number[] = []
-  let gained = 0
-  option.groups.forEach((kinds, index) => {
-    const need = [...kinds]
-    if (index === 0) need.splice(need.indexOf(tileKind), 1)
-    removed.push(...need)
-    gained += GROUP + chiGroup(kinds).hu * HU
-  })
-  return { removed, gained }
-}
-
 export function lhBotAction(state: LhState, seat: number, level: LhLevel, random: () => number = Math.random): LhAction {
   const choices = choicesFor(state, seat)
   const player = state.players[seat]
@@ -141,7 +72,7 @@ export function lhBotAction(state: LhState, seat: number, level: LhLevel, random
   if (choices.chi.length > 0) {
     let best = { index: -1, value: -Infinity }
     choices.chi.forEach((option, index) => {
-      const { removed, gained } = chiValue(option, kind)
+      const { removed, gained } = chiCost(option, kind)
       const value = afterTake(state, seat, removed, gained, level, random)
       if (value > best.value) best = { index, value }
     })
