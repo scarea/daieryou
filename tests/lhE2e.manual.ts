@@ -55,6 +55,9 @@ else assert(result.nextDealer === over.dealer, '荒庄，庄家连庄')
 assert(over.settlement, `金币结算 ${over.settlement?.coinsDelta}`)
 const me = await (await fetch(`${base}/api/me`, { headers: { Authorization: `Bearer ${guest.token}` } })).json() as { user: UserProfile }
 assert(me.user.coins === guest.user.coins + over.settlement!.coinsDelta && me.user.games === 1, `金币已入账（${me.user.coins}）`)
+assert(over.record && over.record.decisions.length === acted && over.record.decisions.every((item) => item.seat === 0), `牌谱记下了我的 ${over.record?.decisions.length} 次决定`)
+const noKey = await (await fetch(`${base}/api/mahjong/review`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${guest.token}` }, body: JSON.stringify({ matchId: over.settlement!.matchId, analysis: '六胡抢复盘测试'.repeat(5) }) })).json() as any
+assert(/API Key/.test(noKey.error || ''), '复盘接口认得六胡抢的牌局（未设置 Key 时提示去填写）')
 assert((await send({ op: 'lh:next' })).ok && (table as unknown as LhView).handNo === 2 && (table as unknown as LhView).dealer === result.nextDealer, '下一局：换庄正确，不再翻牌')
 await send({ op: 'lh:leave' })
 console.log('\n六胡抢端到端测试全部通过')
