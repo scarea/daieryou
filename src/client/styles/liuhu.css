@@ -23,11 +23,34 @@
 .zi.red { color: #c4161c; }
 .zi b, .zi i { position: absolute; left: 0; right: 0; text-align: center; font-style: normal; font-size: var(--zf); }
 .zi b { top: calc(var(--zw) * 0.1); }
-.zi i { bottom: calc(var(--zw) * 0.1); transform: rotate(180deg); }
+.zi i { bottom: calc(var(--zw) * 0.12); transform: rotate(180deg); font-size: calc(var(--zf) * 0.46); opacity: 0.5; }
+/* 细长的牌：上面一个大字，中间一道牌花，底下是倒着的小字（只是装饰，免得看成两张牌） */
+.zi.h::after, .zi.xl::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: calc(var(--zw) * 0.2);
+  height: calc(var(--zw) * 0.2);
+  margin-left: calc(var(--zw) * -0.1);
+  transform: rotate(45deg);
+  border: 1.5px solid currentColor;
+  opacity: 0.28;
+}
+.zi.h::before, .zi.xl::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  bottom: 22%;
+  width: 0;
+  border-left: 1px solid currentColor;
+  opacity: 0.16;
+}
 .zi.s { --zw: 30px; --zh: 40px; --zf: 23px; }
 .zi.m { --zw: 40px; --zh: 54px; --zf: 31px; }
-.zi.h { --zw: 62px; --zh: 104px; --zf: 41px; }
-.zi.xl { --zw: 84px; --zh: 132px; --zf: 56px; }
+.zi.h { --zw: 58px; --zh: 152px; --zf: 43px; }
+.zi.xl { --zw: 78px; --zh: 160px; --zf: 56px; }
 .zi.s i, .zi.m i { display: none; }
 .zi.s b, .zi.m b { top: 50%; transform: translateY(-50%); }
 .zi-back {
@@ -55,13 +78,13 @@
 }
 .lh-felt i { margin-top: -150px; font-style: normal; font-family: var(--font-brush); font-size: 60px; letter-spacing: 16px; color: rgba(255, 255, 255, 0.055); }
 
-.lh-deck { position: absolute; left: 500px; top: calc(var(--mid) - 66px); width: 84px; text-align: center; }
+.lh-deck { position: absolute; left: 510px; top: calc(var(--mid) - 78px); width: 78px; text-align: center; }
 .lh-deck .zi { transform: translateY(calc(var(--layers) * -1.5px)); box-shadow: inset 0 0 0 2px #e8c36a, inset 0 0 0 4px #7a1418, 0 calc(var(--layers) * 1.5px) 0 #d9c79a, 0 calc(var(--layers) * 1.5px + 2px) 0 #8d7a4a, 3px calc(var(--layers) * 1.5px + 10px) 14px rgba(0, 0, 0, 0.6); }
 .lh-deck.empty .zi { opacity: 0.25; }
-.lh-deck > b { position: absolute; left: 0; right: 0; top: 38px; font-size: 34px; color: #fff3c4; text-shadow: 0 2px 4px #000; }
-.lh-deck small { position: absolute; left: 0; right: 0; top: 78px; font-size: 14px; letter-spacing: 2px; color: rgba(255, 240, 200, 0.85); }
+.lh-deck > b { position: absolute; left: 0; right: 0; top: 50px; font-size: 34px; color: #fff3c4; text-shadow: 0 2px 4px #000; }
+.lh-deck small { position: absolute; left: 0; right: 0; top: 92px; font-size: 14px; letter-spacing: 2px; color: rgba(255, 240, 200, 0.85); }
 
-.lh-shown { position: absolute; left: 640px; top: calc(var(--mid) - 66px); display: flex; align-items: center; gap: 14px; transform-origin: 50% 100%; transform: rotateX(-16deg) translateZ(34px); animation: lh-shown-in 0.36s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+.lh-shown { position: absolute; left: 640px; top: calc(var(--mid) - 78px); display: flex; flex-direction: column; align-items: center; gap: 8px; width: 160px; margin-left: -41px; transform-origin: 50% 100%; transform: rotateX(-16deg) translateZ(34px); animation: lh-shown-in 0.36s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
 .lh-shown .zi { box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 0 0 3px var(--gold-1), 0 0 30px 8px rgba(255, 210, 110, 0.75), 0 4px 0 #8d7a4a, 4px 18px 22px rgba(0, 0, 0, 0.6); }
 .lh-shown em { font-style: normal; padding: 5px 14px; border-radius: 999px; font-size: 17px; letter-spacing: 2px; white-space: nowrap; color: #fff3c4; background: rgba(0, 0, 0, 0.62); box-shadow: inset 0 0 0 1px rgba(219, 167, 67, 0.6); }
 .lh-shown.discard em { color: #ffd0d0; box-shadow: inset 0 0 0 1px rgba(255, 120, 120, 0.7); }
@@ -115,7 +138,7 @@
 .lh-columns { display: flex; gap: 5px; align-items: flex-end; pointer-events: auto; }
 .lh-column { display: flex; flex-direction: column; }
 .lh-card { position: relative; display: block; border: 0; padding: 0; background: none; touch-action: none; transition: transform 0.12s; -webkit-tap-highlight-color: transparent; }
-.lh-card + .lh-card { margin-top: -60px; }
+.lh-card + .lh-card { margin-top: -104px; }
 .lh-hand.live .lh-card { cursor: pointer; }
 .lh-hand.live .lh-card:hover { transform: translateY(-6px); }
 .lh-card.selected, .lh-hand.live .lh-card.selected:hover { transform: translateY(-18px); z-index: 3; }
@@ -131,9 +154,9 @@
 .lh-status > b { color: #4a1c02; background: linear-gradient(180deg, #fff3b8, #e0a93a); letter-spacing: 1px; }
 .lh-waits { display: inline-flex; align-items: center; gap: 4px; color: #86efac; }
 .lh-waits .zi { --zw: 24px; --zh: 30px; --zf: 19px; box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 1px 0 #8d7a4a; }
-.lh-actions { left: 0; right: 0; top: 414px; justify-content: center; }
+.lh-actions { left: 790px; right: auto; top: 252px; }
 .mj-act.chi { background: radial-gradient(circle at 35% 28%, #6ee7a8, #16a34a 55%, #14532d); }
-.lh-chi { position: absolute; left: 0; right: 0; top: 232px; z-index: 27; display: grid; justify-items: center; gap: 8px; animation: rise 0.2s ease both; }
+.lh-chi { position: absolute; left: 0; right: 0; top: 396px; z-index: 27; display: grid; justify-items: center; gap: 8px; animation: rise 0.2s ease both; }
 .lh-chi > b { padding: 3px 16px; border-radius: 999px; font-size: 16px; color: #fff3c4; background: rgba(0, 0, 0, 0.75); }
 .lh-chi > div { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 1000px; }
 .lh-chi button { display: flex; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; border: 1.5px solid rgba(219, 167, 67, 0.7); background: linear-gradient(180deg, rgba(60, 12, 16, 0.96), rgba(24, 4, 6, 0.97)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6); cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
@@ -190,12 +213,14 @@
 .mode-phone .game-text small { font-size: 12.5px; }
 .mode-phone .lh-scene { --mid: 256px; }
 .mode-phone .lh-felt { top: 54px; }
-.mode-phone .zi.xl { --zw: 74px; --zh: 116px; --zf: 50px; }
-.mode-phone .lh-deck { left: 510px; top: calc(var(--mid) - 58px); width: 74px; }
-.mode-phone .lh-deck > b { top: 32px; }
-.mode-phone .lh-deck small { top: 70px; }
-.mode-phone .lh-shown { top: calc(var(--mid) - 58px); }
-.mode-phone .lh-shown em { font-style: normal; font-size: 19px; }
+.mode-phone .zi.xl { --zw: 66px; --zh: 118px; --zf: 46px; }
+.mode-phone .zi.h { --zh: 126px; }
+.mode-phone .lh-card + .lh-card { margin-top: -82px; }
+.mode-phone .lh-deck { left: 522px; top: calc(var(--mid) - 62px); width: 66px; }
+.mode-phone .lh-deck > b { top: 30px; }
+.mode-phone .lh-deck small { top: 68px; }
+.mode-phone .lh-shown { top: calc(var(--mid) - 62px); gap: 5px; }
+.mode-phone .lh-shown em { font-style: normal; font-size: 17px; padding: 2px 12px; }
 .mode-phone .lh-zone-top { top: 62px; left: 500px; }
 .mode-phone .lh-zone-left, .mode-phone .lh-zone-right { top: 124px; }
 .mode-phone .lh-fan { min-height: 0; }
@@ -213,10 +238,10 @@
 .mode-phone .lh-seat-right .mj-burst { left: 880px; top: 250px; }
 .mode-phone .lh-hand { bottom: 6px; left: 180px; }
 .mode-phone .lh-status { top: 160px; font-size: 17px; }
-.mode-phone .lh-actions { top: 300px; right: 0; }
+.mode-phone .lh-actions { left: 780px; right: auto; top: 204px; }
 .mode-phone .lh-actions .mj-act { width: 92px; height: 92px; font-size: 54px; }
 .mode-phone .lh-actions .mj-act.pass { width: 76px; height: 76px; font-size: 40px; }
-.mode-phone .lh-chi { top: 150px; }
+.mode-phone .lh-chi { top: 330px; }
 .mode-phone .lh-flip { gap: 14px; }
 .mode-phone .lh-flip h2 { font-size: 50px; }
 .mode-phone .lh-result-groups { margin-bottom: 6px; }
