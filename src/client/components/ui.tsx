@@ -122,6 +122,34 @@ export function SoundToggle() {
   )
 }
 
+/** 全屏开关：安卓浏览器直接进全屏并锁横屏；iPhone 的 Safari 不支持，提示添加到主屏幕 */
+export function FullscreenToggle() {
+  const toast = useStore((state) => state.toast)
+  const [on, setOn] = useState(Boolean(document.fullscreenElement))
+  useEffect(() => {
+    const update = () => setOn(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', update)
+    return () => document.removeEventListener('fullscreenchange', update)
+  }, [])
+  // 已经是从桌面图标打开的全屏应用：不需要这个按钮
+  if (window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone) return null
+  const toggle = async () => {
+    sfx.click()
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {})
+    if (!document.documentElement.requestFullscreen) {
+      return toast('这个浏览器不能直接全屏：点「分享」→「添加到主屏幕」，从桌面图标打开就是全屏', 'gold')
+    }
+    try {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      // 能锁横屏就锁上，画面不用再旋转
+      await (screen.orientation as unknown as { lock?: (orientation: string) => Promise<void> }).lock?.('landscape').catch(() => {})
+    } catch {
+      toast('全屏失败：可以用浏览器菜单里的「添加到主屏幕」，从桌面图标打开', 'error')
+    }
+  }
+  return <button type="button" className={`icon-btn ${on ? '' : 'is-off'}`} title={on ? '退出全屏' : '全屏'} onClick={() => void toggle()}>屏</button>
+}
+
 export function MusicToggle() {
   const [on, setOn] = useState(music.isOn())
   return (

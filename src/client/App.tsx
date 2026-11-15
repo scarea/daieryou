@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Stage } from './components/Stage.tsx'
 import { GoldDust } from './components/GoldDust.tsx'
 import { RecoveryModal } from './components/features.tsx'
-import { ConnBanner, Toasts } from './components/ui.tsx'
+import { Button, ConnBanner, Modal, Toasts } from './components/ui.tsx'
 import { Login } from './scenes/Login.tsx'
 import { Lobby } from './scenes/Lobby.tsx'
 import { Table } from './scenes/Table.tsx'
@@ -57,6 +57,39 @@ export function App() {
     }
   }, [target]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 手机上很容易误触返回（返回键、边缘滑动）：先拦下来问一句
+  const [backAsk, setBackAsk] = useState(false)
+  const inTable = Boolean(mj || lh || room)
+  const inTableRef = useRef(inTable)
+  inTableRef.current = inTable
+  const leaving = useRef(false)
+  useEffect(() => {
+    history.pushState({ guard: true }, '')
+    const onPop = () => {
+      if (leaving.current) return
+      history.pushState({ guard: true }, '')
+      setBackAsk(true)
+    }
+    // 刷新、关标签页：在牌桌上时让浏览器再确认一次
+    const onUnload = (event: BeforeUnloadEvent) => {
+      if (!inTableRef.current || leaving.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('popstate', onPop)
+    window.addEventListener('beforeunload', onUnload)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('beforeunload', onUnload)
+    }
+  }, [])
+  const exitApp = () => {
+    leaving.current = true
+    setBackAsk(false)
+    // 跳过拦截用的那一条记录，回到进来之前的页面
+    history.go(-2)
+  }
+
   const tableView = view ?? (shown === 'table' ? lastView.current : null)
   return (
     <Stage compact allowTall={shown === 'login' || shown === 'boot'}>
@@ -68,6 +101,17 @@ export function App() {
         {shown === 'mahjong' && user && (mj ?? lastMj.current) && <Mahjong table={(mj ?? lastMj.current)!} />}
         {shown === 'liuhu' && user && (lh ?? lastLh.current) && <Liuhu table={(lh ?? lastLh.current)!} />}
         <RecoveryModal />
+        {backAsk && (
+          <Modal title="要退出吗" onClose={() => setBackAsk(false)} width={520}>
+            <p className="modal-lead">{inTable
+              ? <>你还在牌桌上。现在退出，这一局会由机器人替你打完，<br />输赢照常算在你头上。</>
+              : <>刚才按到了返回。确定要离开金殿棋牌吗？</>}</p>
+            <div className="modal-actions">
+              <Button kind="ghost" size="md" onClick={exitApp}>退出</Button>
+              <Button kind="gold" size="md" onClick={() => setBackAsk(false)}>{inTable ? '继续打' : '留下'}</Button>
+            </div>
+          </Modal>
+        )}
       </div>
       <div className={`doors doors-${doors}`}>
         <i className="door door-left" />

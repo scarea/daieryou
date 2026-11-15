@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#7a0f17"/>
+  <rect x="34" y="34" width="444" height="444" rx="84" fill="none" stroke="#f2cf6b" stroke-width="18"/>
+  <text x="256" y="362" font-size="300" text-anchor="middle" fill="#f6d77a" font-family="Songti SC,STSong,serif" font-weight="900">金</text>
+</svg>

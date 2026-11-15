@@ -1,4 +1,6 @@
-// 音效：全部用 WebAudio 实时合成，无需任何音频文件。
+// 音效：用 WebAudio 实时合成；背景音乐和报牌语音是音频文件。
+import { VOICE_CLIPS } from './voiceClips.ts'
+
 const MUTE_KEY = 'daieryou.muted'
 
 let context: AudioContext | null = null
@@ -108,9 +110,49 @@ function startMusic(): void {
   if (!musicEl) {
     musicEl = new Audio('/audio/bgm.mp3')
     musicEl.loop = true
-    musicEl.volume = 0.22
+    musicEl.volume = 0.32
+    musicEl.preload = 'auto'
   }
   void musicEl.play().catch(() => {})
+}
+
+// ------------------------------ 报牌录音 ------------------------------
+const clips = new Map<string, Promise<AudioBuffer | null>>()
+let speaking: AudioBufferSourceNode | null = null
+
+function loadClip(id: string): Promise<AudioBuffer | null> {
+  let clip = clips.get(id)
+  if (!clip) {
+    clip = fetch(`/audio/voice/${id}.mp3`)
+      .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error('missing'))))
+      .then((data) => (context as AudioContext).decodeAudioData(data))
+      .catch(() => null)
+    clips.set(id, clip)
+  }
+  return clip
+}
+
+/** 播一段录好的报牌语音；新的一句顶掉还没念完的旧句。放不了时返回 false */
+async function playClip(id: string): Promise<boolean> {
+  const a = audio()
+  if (!a) return false
+  const buffer = await loadClip(id)
+  if (!buffer) return false
+  try {
+    speaking?.stop()
+  } catch {
+    // ignore
+  }
+  const source = a.ctx.createBufferSource()
+  const gain = a.ctx.createGain()
+  gain.gain.value = 2.2
+  source.buffer = buffer
+  source.connect(gain)
+  gain.connect(a.out)
+  source.onended = () => { if (speaking === source) speaking = null }
+  speaking = source
+  source.start()
+  return true
 }
 
 // ------------------------------ 语音报牌 ------------------------------
@@ -133,9 +175,26 @@ export const voice = {
     }
     if (!value && 'speechSynthesis' in window) window.speechSynthesis.cancel()
   },
-  /** 用浏览器自带的中文语音报牌（"三万""碰""自摸"）；没有语音引擎时静默 */
+  /** 进牌桌前把报牌录音都取回来，免得第一次念的时候卡一下 */
+  preload() {
+    if (!voiceOn || !audio()) return
+    for (const id of Object.values(VOICE_CLIPS)) void loadClip(id)
+  },
+  /** 报牌（"三万""碰""自摸"）：优先放录好的语音，没有这一句时才用浏览器自带的朗读 */
   say(text: string, options: { rate?: number; pitch?: number; urgent?: boolean } = {}) {
-    if (!voiceOn || muted || !('speechSynthesis' in window)) return
+    if (!voiceOn || muted) return
+    const id = VOICE_CLIPS[text]
+    if (id) {
+      void playClip(id).then((ok) => { if (!ok) speak(text, options) })
+      return
+    }
+    speak(text, options)
+  },
+}
+
+function speak(text: string, options: { rate?: number; pitch?: number; urgent?: boolean }): void {
+  {
+    if (!('speechSynthesis' in window)) return
     try {
       const synth = window.speechSynthesis
       // 报牌很密：新的一句顶掉还没念完的旧句
@@ -151,7 +210,7 @@ export const voice = {
     } catch {
       // ignore
     }
-  },
+  }
 }
 
 export const music = {
@@ -166,15 +225,23 @@ export const music = {
     if (value) startMusic()
     else musicEl?.pause()
   },
-  /** 浏览器要求用户操作后才能播放：在第一次点击时启动 */
+  /** 浏览器要求用户操作后才能出声：每次触摸 / 点击都试一次，直到音乐真的响起来 */
   arm() {
+    const events = ['pointerdown', 'touchend', 'click', 'keydown'] as const
     const kick = () => {
+      // 手机上音频上下文也要在用户操作里唤醒，否则音效和报牌都没声
+      audio()
+      voice.preload()
+      if (!musicOn) return
       startMusic()
-      window.removeEventListener('pointerdown', kick)
-      window.removeEventListener('keydown', kick)
+      void musicEl?.play().then(() => events.forEach((name) => window.removeEventListener(name, kick))).catch(() => {})
     }
-    window.addEventListener('pointerdown', kick)
-    window.addEventListener('keydown', kick)
+    events.forEach((name) => window.addEventListener(name, kick, { passive: true }))
+    // 切到后台停、切回来接着放
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) musicEl?.pause()
+      else if (musicOn && musicEl) void musicEl.play().catch(() => {})
+    })
   },
 }
 

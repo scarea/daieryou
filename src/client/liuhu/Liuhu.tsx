@@ -21,6 +21,9 @@ const WHO = ['我', '下家', '对家', '上家']
 const COACH_KEY = 'daieryou.lhCoach'
 const KIND_TITLE = { zimo: '自摸', pao: '胡牌', gong: '抢胡' }
 
+/** 报牌时的叫法：大小字同音，所以念成「小七」「大七」 */
+const spoken = (kind: number) => `${kind >= 10 ? '大' : '小'}${'一二三四五六七八九十'[kind % 10]}`
+
 const readFlag = (key: string, fallback: boolean) => {
   try {
     const value = localStorage.getItem(key)
@@ -104,11 +107,11 @@ export function Liuhu({ table }: { table: LhView }) {
         break
       case 'draw':
         sfx.tileDraw()
-        voice.say(lhName(lhKind(event.tile)))
+        voice.say(spoken(lhKind(event.tile)))
         break
       case 'discard':
         sfx.tileDiscard()
-        voice.say(lhName(lhKind(event.tile)))
+        voice.say(spoken(lhKind(event.tile)))
         break
       case 'drop':
         sfx.tileDiscard()

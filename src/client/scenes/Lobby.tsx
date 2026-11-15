@@ -9,7 +9,7 @@ import { BOT_LEVEL_NAME, BotLevel, LobbyRoom } from '../../shared/protocol.ts'
 import { AdminModal, FriendsModal, GrowthModal, ShopModal, Tutorial } from '../components/features.tsx'
 import { LeaderboardModal, ProfileModal, RecordsModal, RulesModal, SigninModal } from '../components/panels.tsx'
 import { useStage } from '../components/Stage.tsx'
-import { Avatar, Button, Coins, Modal, MusicToggle, SoundToggle, TitleBadge } from '../components/ui.tsx'
+import { Avatar, Button, Coins, FullscreenToggle, Modal, MusicToggle, SoundToggle, TitleBadge } from '../components/ui.tsx'
 import { useStore } from '../store.ts'
 import { sfx } from '../sound.ts'
 
@@ -212,6 +212,7 @@ export function Lobby() {
             <span className="honor-icon">誉</span>
             <b className="num">{user.honor}</b>
           </div>
+          <FullscreenToggle />
           <MusicToggle />
           <SoundToggle />
         </div>

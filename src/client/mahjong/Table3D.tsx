@@ -12,15 +12,18 @@ import { tileSrc } from './Tile.tsx'
 const TW = 38 // 牌宽
 const TH = 52 // 牌高
 const TD = 22 // 牌厚
-const RIVER_Y = 82 // 弃牌第一行离桌心的距离
-const WALL_Y = 304 // 牌墙离桌心的距离
-const HAND_Y = 366 // 立牌离桌心的距离
+// 弃牌和副露是要看清的牌，比牌墙、立牌大一号
+const BW = 44
+const BH = 60
+const RIVER_Y = 132 // 弃牌第一行离桌心的距离
+const WALL_Y = 314 // 牌墙离桌心的距离
+const HAND_Y = 370 // 立牌离桌心的距离
 const STACKS_PER_SIDE = 14
 
 type Pose = 'flat' | 'down' | 'stand'
 
 /** 一张 3D 牌。flat：正面朝上平躺；down：背面朝上（牌墙）；stand：立着，正面朝向这一家 */
-const Tile3 = memo(function Tile3({ kind, x, y, pose, depth = TD, className = '' }: { kind: number; x: number; y: number; pose: Pose; depth?: number; className?: string }) {
+const Tile3 = memo(function Tile3({ kind, x, y, pose, depth = TD, className = '', big = false }: { kind: number; x: number; y: number; pose: Pose; depth?: number; className?: string; big?: boolean }) {
   if (pose === 'stand') {
     // 占地 TW × TD，高 TH
     return (
@@ -34,7 +37,7 @@ const Tile3 = memo(function Tile3({ kind, x, y, pose, depth = TD, className = ''
     )
   }
   return (
-    <div className={`t3 ${pose} ${className}`} style={{ transform: `translate3d(${x - TW / 2}px, ${y - TH / 2}px, 0)`, ['--d' as string]: `${depth}px` }}>
+    <div className={`t3 ${pose} ${big ? 'big' : ''} ${className}`} style={{ transform: `translate3d(${x - (big ? BW : TW) / 2}px, ${y - (big ? BH : TH) / 2}px, 0)`, ['--d' as string]: `${depth}px` }}>
       <i className="f top">{pose === 'flat' && kind >= 0 && <img src={tileSrc(kind)} alt="" draggable={false} />}</i>
       <i className="f s" />
       <i className="f n" />
@@ -50,7 +53,7 @@ function MeldRow({ melds, startX }: { melds: Meld[]; startX: number }) {
     <>
       {melds.map((meld, index) => {
         const begin = cursor
-        cursor += meld.tiles.length * TW + 10
+        cursor += meld.tiles.length * BW + 10
         return meld.tiles.map((tile, tileIndex) => {
           // 暗杠：别人的全盖着；亮出来的四张里两头盖着
           const hidden = meld.type === 'ankan' && (meld.kind < 0 || tileIndex === 0 || tileIndex === 3)
@@ -58,10 +61,11 @@ function MeldRow({ melds, startX }: { melds: Meld[]; startX: number }) {
             <Tile3
               key={`${index}-${tileIndex}`}
               kind={hidden ? -1 : kindOf(tile)}
-              x={begin + tileIndex * TW + TW / 2}
-              y={HAND_Y - 14}
+              x={begin + tileIndex * BW + BW / 2}
+              y={HAND_Y - 18}
               pose={hidden ? 'down' : 'flat'}
               className="meld"
+              big
             />
           )
         })
@@ -114,7 +118,7 @@ export function Table3D({ table, showSpot = true }: { table: MjView; showSpot?: 
 
         {playing && table.seats.map((seat) => {
           const mine = seat.seat === 0
-          const meldWidth = seat.melds.reduce((sum, meld) => sum + meld.tiles.length * TW + 10, 0)
+          const meldWidth = seat.melds.reduce((sum, meld) => sum + meld.tiles.length * BW + 10, 0)
           // 有副露时手牌往左让一让
           const handCount = mine ? 0 : seat.hand ? seat.hand.length : seat.handCount
           const handWidth = handCount * TW
@@ -122,16 +126,17 @@ export function Table3D({ table, showSpot = true }: { table: MjView; showSpot?: 
           const shown = seat.hand ? sortTiles(seat.hand) : null
           return (
             <div key={seat.seat} className="mj3-seat" style={{ transform: `rotateZ(${-90 * seat.seat}deg)` }}>
-              {/* 弃牌：6 张一行，从桌心往自己这边排 */}
+              {/* 弃牌：6 张一行排三行，从桌心往自己这边排；再多就接在第三行右边 */}
               {seat.discards.map((tile, index) => {
                 const isLast = lastTile?.seat === seat.seat && index === seat.discards.length - 1
                 return (
                   <Tile3
                     key={tile}
                     kind={kindOf(tile)}
-                    x={((index % 6) - 2.5) * TW}
-                    y={RIVER_Y + Math.floor(index / 6) * TH + TH / 2}
+                    x={((index < 18 ? index % 6 : index - 12) - 2.5) * BW}
+                    y={RIVER_Y + Math.min(2, Math.floor(index / 6)) * BH + BH / 2}
                     pose="flat"
+                    big
                     className={`river ${isLast ? 'last' : ''}`}
                   />
                 )

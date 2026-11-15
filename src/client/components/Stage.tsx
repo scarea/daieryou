@@ -16,9 +16,17 @@ interface Layout {
 
 const PHONE_MAX = 560
 
+/** 刘海、圆角、手势条占掉的边（像素） */
+function safeInsets(): { x: number; y: number } {
+  const style = getComputedStyle(document.documentElement)
+  const read = (name: string) => parseFloat(style.getPropertyValue(name)) || 0
+  return { x: read('--safe-left') + read('--safe-right'), y: read('--safe-top') + read('--safe-bottom') }
+}
+
 function measure(compact: boolean, allowTall: boolean): Layout {
-  const w = window.innerWidth
-  const h = window.innerHeight
+  const safe = safeInsets()
+  const w = window.innerWidth - safe.x
+  const h = window.innerHeight - safe.y
   const portrait = h > w
   const phone = Math.min(w, h) < PHONE_MAX
   if (phone && portrait && allowTall) {
@@ -50,7 +58,9 @@ export function Stage({ children, compact = false, allowTall = false }: { childr
     update()
     window.addEventListener('resize', update)
     window.addEventListener('orientationchange', update)
+    document.addEventListener('fullscreenchange', update)
     return () => {
+      document.removeEventListener('fullscreenchange', update)
       window.removeEventListener('resize', update)
       window.removeEventListener('orientationchange', update)
     }
