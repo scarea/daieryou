@@ -51,7 +51,6 @@ export function Liuhu({ table }: { table: LhView }) {
   const [voiceOn, setVoiceOn] = useState(voice.isOn())
   const [modal, setModal] = useState<'rules' | 'leave' | 'review' | null>(null)
   const [burst, setBurst] = useState<{ seat: number; text: string; key: number } | null>(null)
-  const [chiOpen, setChiOpen] = useState(false)
   const [resultStage, setResultStage] = useState(0)
   const [flipDone, setFlipDone] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -97,7 +96,6 @@ export function Liuhu({ table }: { table: LhView }) {
     if (table.seq === lastSeq.current) return
     lastSeq.current = table.seq
     setBusy(false)
-    setChiOpen(false)
     const event = table.lastEvent
     if (!event) return
     const show = (seat: number, text: string) => setBurst({ seat, text, key: table.seq })
@@ -129,10 +127,16 @@ export function Liuhu({ table }: { table: LhView }) {
         break
       }
       case 'hu': {
-        const text = table.result?.kind === 'zimo' ? '自摸' : '胡'
+        // 自摸、放炮、抢胡（胡别人摸出来的牌）都报出来
+        const kind = table.result?.kind ?? 'zimo'
+        const text = kind === 'zimo' ? '自摸' : kind === 'pao' ? '放炮' : '抢胡'
         sfx.mahjongWin()
-        voice.say(table.result?.kind === 'zimo' ? '自摸' : '胡了', { urgent: true, rate: 0.95 })
-        show(event.seat, text)
+        voice.say(text, { urgent: true, rate: 0.95 })
+        show(event.seat, kind === 'zimo' ? '自摸' : '胡')
+        if (kind === 'pao' && table.result && table.result.loser >= 0) {
+          const loser = table.result.loser
+          window.setTimeout(() => setBurst({ seat: loser, text: '放炮', key: table.seq + 0.5 }), 700)
+        }
         break
       }
       case 'drawn-game':
@@ -213,7 +217,6 @@ export function Liuhu({ table }: { table: LhView }) {
     if (busy) return
     setBusy(true)
     setSelected(null)
-    setChiOpen(false)
     const ok = await send({ op: 'lh:act', action })
     if (!ok) setBusy(false)
   }
@@ -299,11 +302,7 @@ export function Liuhu({ table }: { table: LhView }) {
     setModal(null)
     await send({ op: 'lh:leave' })
   }
-  const chi = () => {
-    if (table.choices.chi.length === 1) return void act({ type: 'chi', option: 0 })
-    sfx.click()
-    setChiOpen((open) => !open)
-  }
+  const multiChi = table.choices.chi.length > 1
 
   const result = table.result
   const winner = result && result.winner >= 0 ? table.seats[result.winner] : null
@@ -440,25 +439,28 @@ export function Liuhu({ table }: { table: LhView }) {
       )}
 
       {/* ------------------------------ 操作按钮 ------------------------------ */}
-      {myClaim && (
+      {myClaim && !multiChi && (
         <div className="mj-actions lh-actions">
           {table.choices.hu && <button type="button" className="mj-act hu" onClick={() => void act({ type: 'hu' })}>胡</button>}
           {table.choices.peng && <button type="button" className="mj-act pung" onClick={() => void act({ type: 'peng' })}>碰</button>}
-          {table.choices.chi.length > 0 && <button type="button" className="mj-act chi" onClick={chi}>吃</button>}
+          {table.choices.chi.length > 0 && <button type="button" className="mj-act chi" onClick={() => void act({ type: 'chi', option: 0 })}>吃</button>}
           {table.choices.pass && <button type="button" className="mj-act pass" onClick={() => void act({ type: 'pass' })}>过</button>}
         </div>
       )}
-      {myClaim && chiOpen && (
+      {/* 有几种吃法：全部摊开，点哪一种就按哪一种吃 */}
+      {myClaim && multiChi && (
         <div className="lh-chi">
-          <b>选一种吃法{table.choices.chi.some((option) => option.groups.length > 1) ? '（多出来的是下伙）' : ''}</b>
+          <b>{table.choices.chi.length} 种吃法，点一种{table.choices.chi.some((option) => option.groups.length > 1) ? '（多出来的是下伙）' : ''}</b>
           <div>
             {table.choices.chi.map((option, index) => (
-              <button key={index} type="button" onClick={() => void act({ type: 'chi', option: index })}>
+              <button key={index} type="button" className="lh-chi-option" onClick={() => void act({ type: 'chi', option: index })}>
+                <em>吃</em>
                 {option.groups.map((group, at) => (
                   <span key={at} className="lh-meld">{group.map((kind, i) => <Zi key={i} kind={kind} className="m" />)}</span>
                 ))}
               </button>
             ))}
+            <button type="button" className="mj-act pass" onClick={() => void act({ type: 'pass' })}>过</button>
           </div>
         </div>
       )}

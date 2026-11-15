@@ -13,11 +13,13 @@ const TW = 38 // 牌宽
 const TH = 52 // 牌高
 const TD = 22 // 牌厚
 // 弃牌和副露是要看清的牌，比牌墙、立牌大一号
-const BW = 44
-const BH = 60
-const RIVER_Y = 132 // 弃牌第一行离桌心的距离
-const WALL_Y = 314 // 牌墙离桌心的距离
-const HAND_Y = 370 // 立牌离桌心的距离
+const BW = 42
+const BH = 57
+// 从桌心往外一圈一圈排，互不重叠：弃牌 126~297 → 牌墙 300~352 → 立牌 354~376
+const RIVER_Y = 126 // 弃牌第一行离桌心的距离（不小于半行宽，四家的弃牌才不会在桌角相碰）
+const WALL_Y = 300 // 牌墙离桌心的距离
+const HAND_Y = 365 // 立牌离桌心的距离
+const MELD_Y = 345 // 副露（平躺）中心离桌心的距离：占的是牌墙那一圈，所以它前面的牌墙要让开
 const STACKS_PER_SIDE = 14
 
 type Pose = 'flat' | 'down' | 'stand'
@@ -62,7 +64,7 @@ function MeldRow({ melds, startX }: { melds: Meld[]; startX: number }) {
               key={`${index}-${tileIndex}`}
               kind={hidden ? -1 : kindOf(tile)}
               x={begin + tileIndex * BW + BW / 2}
-              y={HAND_Y - 18}
+              y={MELD_Y}
               pose={hidden ? 'down' : 'flat'}
               className="meld"
               big
@@ -89,6 +91,20 @@ export function Table3D({ table, showSpot = true }: { table: MjView; showSpot?: 
       // 从庄家那一侧开始码牌
       if (count > 0) stacks.push({ side: (table.dealer + Math.floor(stack / STACKS_PER_SIDE)) % 4, index: stack % STACKS_PER_SIDE, count })
     }
+  }
+
+  // 每家副露占的横向范围：这一段前面的牌墙让开，不和亮出来的牌叠在一起
+  const meldSpan = new Map<number, [number, number]>()
+  for (const seat of table.seats) {
+    if (seat.seat === 0 || seat.melds.length === 0) continue
+    const meldWidth = seat.melds.reduce((sum, meld) => sum + meld.tiles.length * BW + 10, 0)
+    const handWidth = (seat.hand ? seat.hand.length : seat.handCount) * TW
+    const start = -(handWidth + meldWidth + 14) / 2 + handWidth + 14
+    meldSpan.set(seat.seat, [start - 6, start + meldWidth])
+  }
+  const clear = (side: number, x: number) => {
+    const span = meldSpan.get(side)
+    return !span || x + TW / 2 < span[0] || x - TW / 2 > span[1]
   }
 
   return (
@@ -156,7 +172,7 @@ export function Table3D({ table, showSpot = true }: { table: MjView; showSpot?: 
         {/* 牌墙 */}
         {[0, 1, 2, 3].map((side) => (
           <div key={side} className="mj3-seat" style={{ transform: `rotateZ(${-90 * side}deg)` }}>
-            {stacks.filter((stack) => stack.side === side).map((stack) => (
+            {stacks.filter((stack) => stack.side === side && clear(side, (stack.index - (STACKS_PER_SIDE - 1) / 2) * TW)).map((stack) => (
               <Tile3 key={stack.index} kind={-1} x={(stack.index - (STACKS_PER_SIDE - 1) / 2) * TW} y={WALL_Y + TH / 2} pose="down" depth={stack.count * TD} className="wall" />
             ))}
           </div>

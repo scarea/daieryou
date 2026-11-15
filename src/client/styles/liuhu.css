@@ -156,11 +156,12 @@
 .lh-waits .zi { --zw: 24px; --zh: 30px; --zf: 19px; box-shadow: inset 0 0 0 1px rgba(150, 120, 60, 0.5), 0 1px 0 #8d7a4a; }
 .lh-actions { left: 790px; right: auto; top: 252px; }
 .mj-act.chi { background: radial-gradient(circle at 35% 28%, #6ee7a8, #16a34a 55%, #14532d); }
-.lh-chi { position: absolute; left: 0; right: 0; top: 396px; z-index: 27; display: grid; justify-items: center; gap: 8px; animation: rise 0.2s ease both; }
+.lh-chi { position: absolute; left: 776px; top: 210px; z-index: 27; display: grid; justify-items: start; gap: 8px; animation: rise 0.2s ease both; }
 .lh-chi > b { padding: 3px 16px; border-radius: 999px; font-size: 16px; color: #fff3c4; background: rgba(0, 0, 0, 0.75); }
-.lh-chi > div { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 1000px; }
-.lh-chi button { display: flex; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; border: 1.5px solid rgba(219, 167, 67, 0.7); background: linear-gradient(180deg, rgba(60, 12, 16, 0.96), rgba(24, 4, 6, 0.97)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6); cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
-.lh-chi button:hover { transform: translateY(-4px); border-color: #fff3b8; }
+.lh-chi > div { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; max-width: 470px; }
+.lh-chi-option { position: relative; display: flex; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; border: 1.5px solid rgba(219, 167, 67, 0.7); background: linear-gradient(180deg, rgba(60, 12, 16, 0.96), rgba(24, 4, 6, 0.97)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6); cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
+.lh-chi-option em { position: absolute; left: -8px; top: -10px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-family: var(--font-brush); font-size: 19px; color: #fff; background: radial-gradient(circle at 35% 28%, #6ee7a8, #16a34a 55%, #14532d); box-shadow: 0 0 0 2px #fff, 0 3px 6px rgba(0, 0, 0, 0.5); z-index: 3; }
+.lh-chi-option:hover { transform: translateY(-4px); border-color: #fff3b8; }
 .lh-chi .lh-meld .zi + .zi { margin-top: -20px; }
 
 /* ------------------------------ 翻牌定庄 ------------------------------ */
@@ -241,7 +242,8 @@
 .mode-phone .lh-actions { left: 780px; right: auto; top: 204px; }
 .mode-phone .lh-actions .mj-act { width: 92px; height: 92px; font-size: 54px; }
 .mode-phone .lh-actions .mj-act.pass { width: 76px; height: 76px; font-size: 40px; }
-.mode-phone .lh-chi { top: 330px; }
+.mode-phone .lh-chi { left: 766px; top: 170px; }
+.mode-phone .lh-chi .mj-act.pass { width: 76px; height: 76px; font-size: 40px; }
 .mode-phone .lh-flip { gap: 14px; }
 .mode-phone .lh-flip h2 { font-size: 50px; }
 .mode-phone .lh-result-groups { margin-bottom: 6px; }

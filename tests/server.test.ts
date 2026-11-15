@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { HALLS, RELIEF_AMOUNT, SIGNIN_REWARDS, START_COINS } from '../src/shared/economy.ts'
+import { HALLS, RELIEF_AMOUNT, RELIEF_DAILY_LIMIT, SIGNIN_REWARDS, START_COINS } from '../src/shared/economy.ts'
 import type { RoomView, ServerEvent } from '../src/shared/protocol.ts'
 import { Accounts, AppError } from '../src/server/accounts.ts'
 import { decidePick } from '../src/server/bot.ts'
@@ -92,12 +92,19 @@ test('签到与救济金', async () => {
   await assert.rejects(async () => await accounts.relief(user.id), /低于/)
   await accounts.store.updateUser(user.id, { coins: 10 })
   assert.equal((await accounts.relief(user.id)).user.coins, 10 + RELIEF_AMOUNT)
-  await accounts.store.updateUser(user.id, { coins: 0 })
-  await accounts.relief(user.id)
-  await accounts.store.updateUser(user.id, { coins: 0 })
-  await accounts.relief(user.id)
+  // 领到之后有钱了，就不能接着领
+  await assert.rejects(async () => await accounts.relief(user.id), /低于/)
+  // 每天一共 10 次
+  for (let time = 2; time <= RELIEF_DAILY_LIMIT; time += 1) {
+    await accounts.store.updateUser(user.id, { coins: 0 })
+    const reply = await accounts.relief(user.id)
+    assert.equal(reply.status.reliefLeft, RELIEF_DAILY_LIMIT - time)
+  }
   await accounts.store.updateUser(user.id, { coins: 0 })
   await assert.rejects(async () => await accounts.relief(user.id), /已领完/)
+  // 第二天重新计数
+  await accounts.store.updateUser(user.id, { relief_day: (await accounts.store.getUser(user.id))!.relief_day - 1 })
+  assert.equal((await accounts.relief(user.id)).status.reliefLeft, RELIEF_DAILY_LIMIT - 1)
   assert.ok((await accounts.store.listLedger(user.id)).length >= 6)
 })
 

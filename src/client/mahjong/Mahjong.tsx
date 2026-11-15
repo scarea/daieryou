@@ -475,10 +475,10 @@ export function Mahjong({ table }: { table: MjView }) {
           {table.choices.hu && <button type="button" className="mj-act hu" onClick={() => void act({ type: 'hu' })}>胡</button>}
           {table.choices.kong && <button type="button" className="mj-act kong" onClick={() => void act({ type: 'kong' })}>杠</button>}
           {table.choices.ankan.map((kind) => (
-            <button key={`a${kind}`} type="button" className="mj-act kong" onClick={() => void act({ type: 'ankan', kind })}>杠<small>{kindShort(kind)}</small></button>
+            <button key={`a${kind}`} type="button" className="mj-act kong" onClick={() => void act({ type: 'ankan', kind })}>杠<span className="mj-act-tile"><Tile kind={kind} className="xs" /></span></button>
           ))}
           {table.choices.bukan.map((kind) => (
-            <button key={`b${kind}`} type="button" className="mj-act kong" onClick={() => void act({ type: 'bukan', kind })}>杠<small>{kindShort(kind)}</small></button>
+            <button key={`b${kind}`} type="button" className="mj-act kong" onClick={() => void act({ type: 'bukan', kind })}>杠<span className="mj-act-tile"><Tile kind={kind} className="xs" /></span></button>
           ))}
           {table.choices.pung && <button type="button" className="mj-act pung" onClick={() => void act({ type: 'pung' })}>碰</button>}
           {table.choices.pass && <button type="button" className="mj-act pass" onClick={() => void act({ type: 'pass' })}>过</button>}

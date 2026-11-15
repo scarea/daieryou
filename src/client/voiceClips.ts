@@ -60,5 +60,7 @@ export const VOICE_CLIPS: Record<string, string> = {
   "杀鬼，自摸": "v57",
   "流局": "v58",
   "荒庄": "v59",
-  "语音已开启": "v60"
+  "语音已开启": "v60",
+  "放炮": "v61",
+  "抢胡": "v62"
 }

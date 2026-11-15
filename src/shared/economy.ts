@@ -83,10 +83,12 @@ export function levelOf(exp: number): { level: number; current: number; need: nu
 
 // ------------------------------ 签到与救济 ------------------------------
 
-export const SIGNIN_REWARDS = [500, 800, 1000, 1500, 2000, 3000, 6000]
+// 连签 7 天，从 2000 逐级涨到 5000
+export const SIGNIN_REWARDS = [2000, 2500, 3000, 3500, 4000, 4500, 5000]
 export const RELIEF_THRESHOLD = HALLS[0].minCoins
-export const RELIEF_AMOUNT = 2000
-export const RELIEF_DAILY_LIMIT = 3
+// 救济金：金币不够进最低场时，每天可领 10 次，每次 5000
+export const RELIEF_AMOUNT = 5000
+export const RELIEF_DAILY_LIMIT = 10
 
 // ------------------------------ 头像 ------------------------------
 

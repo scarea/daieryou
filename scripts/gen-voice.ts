@@ -10,6 +10,8 @@ const lines: string[] = []
 for (let kind = 0; kind < KIND_COUNT; kind += 1) lines.push(kindName(kind))
 for (const size of ['小', '大']) for (const num of NUM) lines.push(`${size}${num}`)
 lines.push('碰', '杠', '吃', '笑', '提', '跑', '重跑', '自摸', '胡了', '杀鬼，自摸', '流局', '荒庄', '语音已开启')
+// 新增的句子只往后加，前面的编号不变
+lines.push('放炮', '抢胡')
 
 const dir = 'public/audio/voice'
 rmSync(dir, { recursive: true, force: true })
