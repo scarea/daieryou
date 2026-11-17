@@ -309,3 +309,49 @@ test('自己打过的牌不能再吃；决定都记进牌谱', () => {
   assert.throws(() => applyLiuhu(state, actorOf(state), { type: 'discard', tile: 999 }))
   assert.equal(state.log.length, before)
 })
+
+/** 把某家手里的三张变成亮出来的笑 */
+function makeXiao(state: LhState, seat: number, name: string): void {
+  const kind = NAMES.indexOf(name)
+  const player = state.players[seat]
+  const tiles = player.hand.filter((tile) => lhKind(tile) === kind).slice(0, 3)
+  assert.equal(tiles.length, 3)
+  player.hand = player.hand.filter((tile) => !tiles.includes(tile))
+  player.melds.push({ type: 'xiao', kind, tiles, hu: makeGroup('xiao', tiles.map(lhKind)).hu })
+}
+
+test('别家笑了的牌：打出去不能听牌就不能打', () => {
+  const state = table([
+    '一二三二七十四五六七八九贰壹拾',
+    '贰贰贰',
+  ])
+  makeXiao(state, 1, '贰')
+  assert.equal(state.phase, 'discard')
+  const discards = choicesFor(state, 0).discards
+  assert.ok(!discards.some((tile) => lhName(lhKind(tile)) === '贰'), '贰被笑了，打了也不听牌：不能打')
+  assert.ok(discards.some((tile) => lhName(lhKind(tile)) === '拾'), '别的牌照常能打')
+})
+
+test('别家笑了的牌：打出去能听牌才可以打，打出后笑家拿走变跑，别家不能抢胡', () => {
+  const state = table([
+    '一二三二七十四五六七八九贰壹壹',
+    '贰贰贰',
+    '壹叁肆伍陆柒捌玖三四五六七八',
+  ])
+  makeXiao(state, 1, '贰')
+  const er = state.players[0].hand.find((tile) => lhName(lhKind(tile)) === '贰') as number
+  assert.ok(choicesFor(state, 0).discards.includes(er), '打掉贰之后听壹：可以打')
+  // 对家本来能用贰凑成壹贰叁胡牌
+  assert.ok(checkWin(state.players[2].melds, state.players[2].hand, er, false))
+  applyLiuhu(state, 0, { type: 'discard', tile: er })
+  // 只有笑家能对这张牌表态（他自己能胡可以胡，这里选择不胡）；对家没有机会
+  assert.ok((state.pending?.steps ?? []).every((step) => step.seat === 1))
+  if ((state.phase as string) === 'claim' && choicesFor(state, 1).hu) applyLiuhu(state, 1, { type: 'pass' })
+  const pao = state.players[1].melds.find((item) => item.kind === NAMES.indexOf('贰'))!
+  assert.equal(pao.type, 'pao', '笑家拿走贰，笑变成跑')
+  assert.equal(pao.tiles.length, 4)
+  assert.ok(!state.events.some((event) => event.t === 'hu'), '对家不能抢胡')
+  assert.equal(state.phase, 'discard')
+  assert.equal(actorOf(state), 1, '第一次跑要打一张')
+  conserve(state)
+})

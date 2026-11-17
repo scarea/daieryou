@@ -39,7 +39,11 @@ export function App() {
   const lastLh = useRef(lh)
   if (lh) lastLh.current = lh
   useEffect(() => {
-    if (target === shown) return
+    if (target === shown) {
+      // 刚要切场景又切了回来（比如连点两次开局）：把合到一半的殿门重新打开
+      setDoors((current) => (current === 'closing' ? 'open' : current))
+      return
+    }
     if (shown === 'boot') {
       setShown(target)
       return

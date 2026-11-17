@@ -18,9 +18,14 @@ export interface LhTimings {
   /** 翻牌定庄动画：首轮时长 + 每多一轮追加的时长 */
   flipMs: number
   flipExtraMs: number
+  /** 机器人打牌的思考时间（偶尔会多想一会儿） */
   botMinMs: number
   botMaxMs: number
+  /** 机器人表态的基础时间：过最快，胡次之，吃碰要掂量得久一些 */
   claimMs: number
+  /** 客户端逐张亮牌：除最后一张外每张亮多久、吃碰笑提跑的大字留多久（与 Liuhu.tsx 保持一致） */
+  stageMs: number
+  meldStageMs: number
   /** 真人房间里：打牌 / 表态的思考时限 */
   turnMs: number
   claimTurnMs: number
@@ -30,7 +35,7 @@ export interface LhTimings {
 }
 
 export const LH_TIMINGS: LhTimings = {
-  flipMs: 3600, flipExtraMs: 2000, botMinMs: 900, botMaxMs: 1500, claimMs: 800,
+  flipMs: 3600, flipExtraMs: 2000, botMinMs: 1600, botMaxMs: 3400, claimMs: 900, stageMs: 800, meldStageMs: 500,
   turnMs: 20000, claimTurnMs: 12000, offlineMs: 3500, matchMs: 12000, idleMs: 20 * 60 * 1000,
 }
 
@@ -63,6 +68,8 @@ interface Table {
   settled: boolean
   seq: number
   deadlineAt: number | null
+  /** 客户端把这一批牌逐张亮完的时间：机器人和倒计时都从这之后才开始 */
+  stageUntil: number
   timer: NodeJS.Timeout | null
   idleTimer: NodeJS.Timeout | null
 }
@@ -200,6 +207,7 @@ export class LiuhuManager {
       settled: false,
       seq: 0,
       deadlineAt: null,
+      stageUntil: 0,
       timer: null,
       idleTimer: null,
     }
@@ -233,7 +241,7 @@ export class LiuhuManager {
         mode: 'room', isPrivate: Boolean(isPrivate), matching: false, level: LH_LEVELS.includes(level) ? level : 'hard',
       })
       this.touch(table)
-      this.pushAll(table, null)
+      this.pushAll(table, [])
       this.onLobbyChange?.()
     })
   }
@@ -260,7 +268,7 @@ export class LiuhuManager {
       }
       this.touch(table)
       if (table.seats.every((seat) => seat !== null)) await this.begin(table)
-      else this.pushAll(table, null)
+      else this.pushAll(table, [])
     })
   }
 
@@ -268,7 +276,7 @@ export class LiuhuManager {
     return this.run(async () => {
       const table = this.tables.get(roomId)
       if (!table || table.mode !== 'room') throw new AppError('房间不存在或已解散')
-      if (this.userTable.get(userId) === table.id) return this.pushAll(table, null)
+      if (this.userTable.get(userId) === table.id) return this.pushAll(table, [])
       if (table.phase !== 'waiting') throw new AppError('这桌已经开打了')
       await this.requireHall(table.hall.id, userId)
       await this.release(userId)
@@ -278,7 +286,7 @@ export class LiuhuManager {
       table.seats[index] = seat
       this.userTable.set(userId, table.id)
       this.touch(table)
-      this.pushAll(table, null)
+      this.pushAll(table, [])
       this.onLobbyChange?.()
     })
   }
@@ -322,7 +330,7 @@ export class LiuhuManager {
         table.flip = null
         await this.deal(table)
       } else {
-        this.pushAll(table, null)
+        this.pushAll(table, [])
       }
     })
   }
@@ -359,7 +367,7 @@ export class LiuhuManager {
       await this.maybeNext(table)
     }
     if (table.hostSeat === index) table.hostSeat = table.seats.findIndex((item) => item && !item.isBot && !item.away)
-    this.pushAll(table, null)
+    this.pushAll(table, [])
     this.onLobbyChange?.()
   }
 
@@ -377,7 +385,7 @@ export class LiuhuManager {
       this.hub.send(userId, { ev: 'lh', table: null })
       return
     }
-    this.pushAll(table, null)
+    this.pushAll(table, [])
   }
 
   /** 掉线：轮到他时改由机器人代打（稍等几秒给重连的机会） */
@@ -387,7 +395,7 @@ export class LiuhuManager {
       if (!table) return
       if (table.phase === 'waiting' && table.mode === 'room') return this.doLeave(userId)
       this.advance(table)
-      this.pushAll(table, null)
+      this.pushAll(table, [])
     })
   }
 
@@ -444,7 +452,7 @@ export class LiuhuManager {
     const { rounds, dealer } = flipForDealer(this.random)
     table.flip = rounds
     table.dealer = dealer
-    this.pushAll(table, null)
+    this.pushAll(table, [])
     this.onLobbyChange?.()
     this.schedule(table, this.timings.flipMs + (rounds.length - 1) * this.timings.flipExtraMs, () => this.deal(table))
   }
@@ -460,6 +468,20 @@ export class LiuhuManager {
   }
 
   /** 安排当前该出手的人：机器人 / 托管自动出，真人房间里给真人计时 */
+  /** 机器人像人一样想一会儿：打牌 1.6~3.4 秒，偶尔多想；过牌快，吃碰慢一些 */
+  private thinkMs(action: LhAction): number {
+    const r = this.random
+    const { botMinMs, botMaxMs, claimMs } = this.timings
+    if (action.type === 'discard') {
+      const ms = botMinMs + r() * (botMaxMs - botMinMs)
+      return r() < 0.15 ? ms + botMinMs * (0.8 + r()) : ms
+    }
+    if (action.type === 'pass') return claimMs * (1 + r() * 0.8)
+    if (action.type === 'hu') return claimMs * (1.1 + r() * 0.6)
+    return claimMs * (1.5 + r())
+  }
+
+  /** 安排当前该出手的人：机器人 / 托管自动出，真人房间里给真人计时；都等前面的牌在桌上亮完 */
   private advance(table: Table): void {
     const state = table.state
     if (!state || state.phase === 'over') return
@@ -468,6 +490,7 @@ export class LiuhuManager {
     const claim = state.phase === 'claim'
     const online = !seat.isBot && !seat.away && this.hub.isOnline(seat.userId)
     const mark = state.events.length
+    const staging = Math.max(0, table.stageUntil - Date.now())
 
     if (online) {
       if (table.mode === 'practice') {
@@ -476,7 +499,7 @@ export class LiuhuManager {
         table.deadlineAt = null
         return
       }
-      const limit = claim ? this.timings.claimTurnMs : this.timings.turnMs
+      const limit = staging + (claim ? this.timings.claimTurnMs : this.timings.turnMs)
       table.deadlineAt = Date.now() + limit
       this.schedule(table, limit, async () => {
         if (table.state !== state || state.events.length !== mark || state.phase === 'over') return
@@ -488,15 +511,24 @@ export class LiuhuManager {
       return
     }
 
-    const { botMinMs, botMaxMs, claimMs, offlineMs } = this.timings
-    const delay = seat.isBot || seat.away ? (claim ? claimMs : botMinMs + this.random() * (botMaxMs - botMinMs)) : offlineMs
     table.deadlineAt = null
-    this.schedule(table, delay, async () => {
+    if (!seat.isBot && !seat.away) {
+      // 掉线的人：等一会儿看他能不能连回来，再由机器人代打
+      this.schedule(table, staging + this.timings.offlineMs, async () => {
+        if (table.state !== state || state.events.length !== mark || state.phase === 'over') return
+        if (this.hub.isOnline(seat.userId)) return this.advance(table)
+        await this.apply(table, actor, lhBotAction(state, actor, 'normal', this.random))
+      })
+      return
+    }
+    // 先想好怎么出，再按出法决定想多久
+    const action = lhBotAction(state, actor, seat.isBot ? table.level : 'normal', this.random)
+    this.schedule(table, staging + this.thinkMs(action), async () => {
       if (table.state !== state || state.events.length !== mark || state.phase === 'over') return
-      if (!seat.isBot && !seat.away && this.hub.isOnline(seat.userId)) return this.advance(table)
-      await this.apply(table, actor, lhBotAction(state, actor, seat.isBot ? table.level : 'normal', this.random))
+      await this.apply(table, actor, action)
     })
   }
+
 
   private async apply(table: Table, seat: number, action: LhAction): Promise<void> {
     const state = table.state as LhState
@@ -511,20 +543,22 @@ export class LiuhuManager {
 
   private async afterChange(table: Table, events: LhEvent[]): Promise<void> {
     const state = table.state as LhState
-    // 一次操作可能连带多个事件（如打牌 → 没人要 → 下家摸牌），推送其中最值得演出的那个
-    const rank = (event: LhEvent) => (event.t === 'hu' || event.t === 'drawn-game' ? 5 : event.t === 'meld' || event.t === 'chi' ? 4 : event.t === 'discard' ? 3 : event.t === 'draw' || event.t === 'open' ? 2 : 1)
-    const shown = events.reduce<LhEvent | null>((best, event) => (!best || rank(event) >= rank(best) ? event : best), null)
+    // 客户端会把这批牌逐张亮出来：算出要亮多久
+    const tiles = events.filter((event) => event.t === 'open' || event.t === 'draw' || event.t === 'discard').length
+    const melds = events.filter((event) => event.t === 'meld' || event.t === 'chi').length
+    const stage = Math.max(0, tiles - 1) * this.timings.stageMs + melds * this.timings.meldStageMs
+    table.stageUntil = Math.max(table.stageUntil, Date.now()) + stage
     if (state.phase === 'over') {
       if (table.timer) clearTimeout(table.timer)
       table.timer = null
       table.deadlineAt = null
       await this.settle(table)
-      this.pushAll(table, shown)
+      this.pushAll(table, events)
       this.onLobbyChange?.()
       return
     }
     this.advance(table)
-    this.pushAll(table, shown)
+    this.pushAll(table, events)
   }
 
   private summary(table: Table): string {
@@ -583,16 +617,19 @@ export class LiuhuManager {
 
   // ------------------------------ 视图 ------------------------------
 
-  private pushAll(table: Table, event: LhEvent | null): void {
+  private pushAll(table: Table, events: LhEvent[]): void {
     table.seq += 1
     for (const seat of table.seats) {
       if (!seat || seat.isBot || seat.away) continue
       const index = table.seats.indexOf(seat)
-      this.hub.send(seat.userId, { ev: 'lh', table: this.view(table, index, event) })
+      this.hub.send(seat.userId, { ev: 'lh', table: this.view(table, index, events) })
     }
   }
 
-  private view(table: Table, my: number, event: LhEvent | null): LhView {
+  private view(table: Table, my: number, events: LhEvent[]): LhView {
+    // 其中最值得演出的那一个（兼容只看一个事件的用法）
+    const rank = (item: LhEvent) => (item.t === 'hu' || item.t === 'drawn-game' ? 5 : item.t === 'meld' || item.t === 'chi' ? 4 : item.t === 'discard' ? 3 : item.t === 'draw' || item.t === 'open' ? 2 : 1)
+    const event = events.reduce<LhEvent | null>((best, item) => (!best || rank(item) >= rank(best) ? item : best), null)
     const state = table.state
     const over = state?.phase === 'over'
     const rel = (seat: number) => (seat < 0 ? seat : (seat - my + LH_SEATS) % LH_SEATS)
@@ -669,6 +706,7 @@ export class LiuhuManager {
       settlement: mySeat ? table.settlements.get(mySeat.userId) ?? null : null,
       seq: table.seq,
       lastEvent: event ? relEvent(event) : null,
+      events: events.map(relEvent),
       record: over && state
         ? { decisions: state.log.filter((item) => item.seat === my).map((item) => ({ ...item, seat: 0, from: rel(item.from) })), level: table.level }
         : null,

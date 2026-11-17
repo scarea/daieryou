@@ -71,6 +71,8 @@ export interface LhView {
   settlement: LhSettlement | null
   seq: number
   lastEvent: LhEvent | null
+  /** 这一次推送里按先后发生的所有事件：客户端照着一张一张亮牌、报牌 */
+  events: LhEvent[]
   /** 结束后附带我这一局的每一次决定，供复盘 */
   record: LhRecord | null
 }

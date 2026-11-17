@@ -60,7 +60,10 @@ export function reviewLiuhu(record: LhRecord, result: LhResult | null): LhReview
     if (decision.act === 'discard') {
       turn += 1
       const free = decision.hand.filter((tile) => decision.hand.filter((other) => lhKind(other) === lhKind(tile)).length < 3)
-      const options = discardValues(melds, decision.hand, free.length > 0 ? free : decision.hand)
+      const pool = free.length > 0 ? free : decision.hand
+      // 别家笑了的牌不一定能打：只在当时真能打的牌里比较
+      const legal = decision.allowed ? pool.filter((tile) => decision.allowed!.includes(lhKind(tile))) : pool
+      const options = discardValues(melds, decision.hand, legal.length > 0 ? legal : pool)
       const chosen = options.find((option) => option.kind === lhKind(decision.out)) ?? options[options.length - 1]
       const best = options[0]
       const loss = best.value - chosen.value

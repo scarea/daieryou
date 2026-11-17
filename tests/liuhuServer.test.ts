@@ -11,7 +11,7 @@ import { LhTimings, LiuhuManager } from '../src/server/liuhu.ts'
 import { lhBotAction } from '../src/server/lhBot.ts'
 import { SqliteStore } from '../src/server/sqliteStore.ts'
 
-const FAST: LhTimings = { flipMs: 5, flipExtraMs: 1, botMinMs: 1, botMaxMs: 2, claimMs: 1, turnMs: 300, claimTurnMs: 300, offlineMs: 5, matchMs: 40, idleMs: 60000 }
+const FAST: LhTimings = { flipMs: 5, flipExtraMs: 1, botMinMs: 1, botMaxMs: 2, claimMs: 1, stageMs: 0, meldStageMs: 0, turnMs: 300, claimTurnMs: 300, offlineMs: 5, matchMs: 40, idleMs: 60000 }
 
 function mulberry(seed: number) {
   let a = seed
@@ -87,6 +87,11 @@ test('六胡抢人机试炼：翻牌定庄 → 整局 → 结算 → 下一局',
     assert.equal(view(userId)!.dealer, nextDealer)
     assert.equal(view(userId)!.flip, null)
   }
+  // 每次推送带着这一步里发生的全部事件，客户端照着逐张亮牌、报牌
+  assert.ok(views.every((table) => Array.isArray(table.events)))
+  assert.ok(views.every((table) => table.events.length === 0 || table.events.some((event) => JSON.stringify(event) === JSON.stringify(table.lastEvent))))
+  const tiles = (table: LhView) => table.events.filter((event) => event.t === 'draw' || event.t === 'discard').length
+  assert.ok(views.some((table) => tiles(table) >= 2), '打出没人要、下家接着摸：两张牌在同一次推送里')
   // 对局中看不到别人的手牌，也看不到别人扣着的提
   for (const table of views) {
     if (table.phase === 'over') continue

@@ -9,6 +9,8 @@
 //      → 都不要就放到摸牌人的右手边，下家接着摸。
 //  - 打出的牌：别家能胡可以胡（放炮）→ 能跑必须跑、可以碰 → 下家可以吃。
 //  - 自己打过的牌不能再吃（别人后来打出、自己后来摸到都不行），但可以胡。
+//  - 别家笑了的牌：只有打出去之后自己能听牌时才可以打；打出来（或摸出来）由笑家拿走变跑，
+//    别家不能抢胡，也不能碰、吃（笑家自己能胡可以胡）。提 / 龙同理：自己摸到就成，别人抢不走。
 //  - 吃 / 碰 / 笑之后必须打一张。第一次提 / 跑打一张，之后的"重跑"不打。
 //  - 想吃没吃、能碰没碰，这张牌就成了自己的臭牌，之后不能再吃 / 碰同样的牌。
 //  - 墩上的牌摸完没人胡：荒庄，庄家连庄。
@@ -64,6 +66,8 @@ export interface LhDecision {
   from: number
   source: 'open' | 'draw' | 'discard' | ''
   can: { hu: boolean; peng: boolean; chi: number[][][] }
+  /** 打牌时能打的牌种（复盘只在这些里面挑更好的打法） */
+  allowed?: number[]
   act: LhAction['type']
   /** 打出的牌（id）或选的吃法序号；其余为 -1 */
   out: number
@@ -224,10 +228,37 @@ function mustDiscard(player: LhPlayer): boolean {
   return player.hand.length > 0 && totalTiles(player) > 14 + Math.max(0, foursOf(player) - 1)
 }
 
-/** 可以打出的牌：起手的坎不能拆（除非手里只剩坎） */
-export function discardable(player: LhPlayer): number[] {
+/** 别家笑了的牌种：这些牌只能等笑家拿去变跑 */
+export function xiaoKindsOf(state: LhState, seat: number): Set<number> {
+  const kinds = new Set<number>()
+  state.players.forEach((other, index) => {
+    if (index === seat) return
+    for (const item of other.melds) if (item.type === 'xiao') kinds.add(item.kind)
+  })
+  return kinds
+}
+
+/** 打掉这张之后能不能听牌 */
+export function tenpaiAfter(melds: TableMeld[], hand: number[], tile: number, rules: LhRules = LH_RULES): boolean {
+  const rest = hand.filter((item) => item !== tile)
+  for (let kind = 0; kind < 20; kind += 1) if (checkWin(melds, rest, kind * 4, false, rules)) return true
+  return false
+}
+
+/**
+ * 可以打出的牌：
+ *  - 起手的坎不能拆（除非手里只剩坎）；
+ *  - 别家笑了的牌，只有打出去之后能听牌时才可以打。
+ * 实在没有别的牌可打时，才放开这些限制，免得卡死。
+ */
+export function discardable(state: LhState, seat: number): number[] {
+  const player = state.players[seat]
   const free = player.hand.filter((tile) => countOf(player.hand, lhKind(tile)) < 3)
-  return free.length > 0 ? free : [...player.hand]
+  const pool = free.length > 0 ? free : [...player.hand]
+  const locked = xiaoKindsOf(state, seat)
+  if (locked.size === 0) return pool
+  const allowed = pool.filter((tile) => !locked.has(lhKind(tile)) || tenpaiAfter(player.melds, player.hand, tile, state.rules))
+  return allowed.length > 0 ? allowed : pool
 }
 
 function meld(type: GroupType, kind: number, tiles: number[], rules: LhRules, from?: number): LhMeld {
@@ -317,6 +348,14 @@ function expose(state: LhState, tile: number, from: number, source: 'draw' | 'di
       taken = true
     }
   }
+  // 别家笑了的牌：只能由笑家拿走变跑，别家不能抢胡、碰、吃
+  const xiaoOwner = taken ? undefined : others.find((seat) => state.players[seat].melds.some((item) => item.type === 'xiao' && item.kind === kind))
+  if (xiaoOwner !== undefined) {
+    const owner = state.players[xiaoOwner]
+    if (checkWin(owner.melds, owner.hand, tile, false, state.rules)) steps.push({ seat: xiaoOwner, kind: 'hu' })
+    steps.push({ seat: xiaoOwner, kind: 'meld' })
+    taken = true
+  }
   if (!taken) {
     for (const seat of others) {
       const player = state.players[seat]
@@ -394,7 +433,7 @@ export function actorOf(state: LhState): number {
 }
 
 export function choicesFor(state: LhState, seat: number): LhChoices {
-  if (state.phase === 'discard') return state.turn === seat ? { ...NONE, discards: discardable(state.players[seat]) } : NONE
+  if (state.phase === 'discard') return state.turn === seat ? { ...NONE, discards: discardable(state, seat) } : NONE
   if (state.phase !== 'claim' || !state.pending) return NONE
   const step = state.pending.steps[0]
   if (!step || step.seat !== seat) return NONE
@@ -454,6 +493,7 @@ export function applyLiuhu(state: LhState, seat: number, action: LhAction): void
     from: claim ? pending.from : -1,
     source: claim ? pending.source : '',
     can: { hu: choices.hu, peng: choices.peng, chi: choices.chi.map((option) => option.groups) },
+    ...(action.type === 'discard' ? { allowed: [...new Set(choices.discards.map(lhKind))] } : {}),
     act: action.type,
     out: action.type === 'discard' ? action.tile : action.type === 'chi' ? action.option : -1,
     fresh: kindOut >= 0 && !state.players.some((other) => other.discards.some((tile) => lhKind(tile) === kindOut)),

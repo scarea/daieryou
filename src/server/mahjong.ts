@@ -34,7 +34,7 @@ export interface MjTimings {
 }
 
 export const MJ_TIMINGS: MjTimings = {
-  diceMs: 5200, diceExtraMs: 2600, botMinMs: 650, botMaxMs: 1250, claimMs: 550,
+  diceMs: 5200, diceExtraMs: 2600, botMinMs: 1500, botMaxMs: 3200, claimMs: 1000,
   turnMs: 20000, claimTurnMs: 10000, offlineMs: 3500, matchMs: 12000, idleMs: 20 * 60 * 1000,
 }
 
@@ -503,14 +503,33 @@ export class MahjongManager {
       return
     }
 
-    const { botMinMs, botMaxMs, claimMs, offlineMs } = this.timings
-    const delay = seat.isBot || seat.away ? (claim ? claimMs : botMinMs + this.random() * (botMaxMs - botMinMs)) : offlineMs
     table.deadlineAt = null
+    const mark = state.events.length
+    if (!seat.isBot && !seat.away) {
+      // 掉线的人：等一会儿看他能不能连回来，再由机器人代打
+      this.schedule(table, this.timings.offlineMs, async () => {
+        if (table.state !== state || state.events.length !== mark || state.phase === 'over') return
+        if (this.hub.isOnline(seat.userId)) return this.advance(table)
+        await this.apply(table, actor, botAction(state, actor, 'normal', this.random))
+      })
+      return
+    }
+    // 先想好怎么出，再按出法决定想多久：打牌 1.5~3.2 秒（偶尔多想一会儿），过牌快，碰杠慢一些
+    const action = botAction(state, actor, seat.isBot ? table.level : 'normal', this.random)
+    const { botMinMs, botMaxMs, claimMs } = this.timings
+    const r = this.random
+    let delay: number
+    if (action.type === 'discard') {
+      delay = botMinMs + r() * (botMaxMs - botMinMs)
+      if (r() < 0.15) delay += botMinMs * (0.8 + r())
+    } else if (action.type === 'pass') {
+      delay = claimMs * (1 + r() * 0.8)
+    } else {
+      delay = claimMs * (1.3 + r() * 0.9)
+    }
     this.schedule(table, delay, async () => {
-      if (table.state !== state || state.phase === 'over') return
-      // 掉线的人如果已经连回来了，就把操作权还给他
-      if (!seat.isBot && !seat.away && this.hub.isOnline(seat.userId)) return this.advance(table)
-      await this.apply(table, actor, botAction(state, actor, seat.isBot ? table.level : 'normal', this.random))
+      if (table.state !== state || state.events.length !== mark || state.phase === 'over') return
+      await this.apply(table, actor, action)
     })
   }
 

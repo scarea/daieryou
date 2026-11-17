@@ -20,7 +20,9 @@ const map: Record<string, string> = {}
 lines.forEach((text, index) => {
   const id = `v${String(index).padStart(2, '0')}`
   const raw = `${dir}/${id}.aiff`
-  execFileSync('say', ['-v', 'Tingting', '-r', '210', '-o', raw, text])
+  // 多音字按牌桌上的读法念：重跑的「重」读 chóng
+  const speech = text === '重跑' ? '虫跑' : text
+  execFileSync('say', ['-v', 'Tingting', '-r', '210', '-o', raw, speech])
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw, '-af', 'silenceremove=start_periods=1:start_threshold=-50dB,volume=1.6', '-ac', '1', '-ar', '24000', '-b:a', '40k', `${dir}/${id}.mp3`])
   rmSync(raw)
   map[text] = id

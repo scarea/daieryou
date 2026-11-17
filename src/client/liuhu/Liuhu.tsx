@@ -1,7 +1,7 @@
 // 常宁六胡抢牌桌：翻牌定庄、摸牌亮牌、吃碰笑提跑、听牌提示与结算。
 import { PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCoins, hallById } from '../../shared/economy.ts'
-import type { LhAction, LhMeld } from '../../shared/liuhu/game.ts'
+import type { LhAction, LhEvent, LhMeld } from '../../shared/liuhu/game.ts'
 import { waitsOf } from '../../shared/liuhu/eval.ts'
 import { GROUP_NAME } from '../../shared/liuhu/hand.ts'
 import { lhKind, lhName } from '../../shared/liuhu/tiles.ts'
@@ -61,6 +61,9 @@ export function Liuhu({ table }: { table: LhView }) {
   /** 正在拖着理牌的那张牌，以及它要落到哪一列（left / right 表示在两头另起一列） */
   const [dragging, setDragging] = useState<{ tile: number; target: number | 'left' | 'right' | null } | null>(null)
   const { rotated } = useStage()
+  /** 正在逐张演出时，临时亮在桌上的那张牌 */
+  const [ghost, setGhost] = useState<{ tile: number; from: number; source: 'open' | 'draw' | 'discard' } | null>(null)
+  const [staging, setStaging] = useState(false)
   const practice = table.mode === 'practice'
   const playing = table.phase === 'discard' || table.phase === 'claim' || table.phase === 'over'
 
@@ -87,64 +90,97 @@ export function Liuhu({ table }: { table: LhView }) {
   const me = table.seats[0]
   const myMove = table.actor === 0
   const canDiscard = table.phase === 'discard' && myMove
-  const myClaim = table.phase === 'claim' && myMove
-  const shown = table.shown
+  // 前面的牌还在一张张亮的时候，先不出按钮，免得对着上一张牌点了吃碰
+  const myClaim = table.phase === 'claim' && myMove && !staging
+  const shown = ghost ?? (table.phase === 'claim' ? table.shown : null)
 
   // ------------------------------ 事件 → 音效、语音、演出 ------------------------------
+  // 一次推送里可能连着发生几件事（打出一张没人要 → 下家摸出一张 → …）：
+  // 照先后顺序一张一张亮出来、报出来，报的牌和桌上亮的牌始终是同一张
   const lastSeq = useRef(0)
+  const playUntil = useRef(0)
+  const timers = useRef<number[]>([])
+  useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), [])
   useEffect(() => {
     if (table.seq === lastSeq.current) return
     lastSeq.current = table.seq
     setBusy(false)
-    const event = table.lastEvent
-    if (!event) return
-    const show = (seat: number, text: string) => setBurst({ seat, text, key: table.seq })
-    switch (event.t) {
-      case 'open':
-        sfx.flip()
-        break
-      case 'draw':
-        sfx.tileDraw()
-        voice.say(spoken(lhKind(event.tile)))
-        break
-      case 'discard':
-        sfx.tileDiscard()
-        voice.say(spoken(lhKind(event.tile)))
-        break
-      case 'drop':
-        sfx.tileDiscard()
-        break
-      case 'chi':
-        sfx.tileMeld(3)
-        voice.say('吃', { urgent: true, rate: 1 })
-        show(event.seat, '吃')
-        break
-      case 'meld': {
-        const text = event.again ? '重跑' : GROUP_NAME[event.type]
-        sfx.tileMeld(event.type === 'ti' || event.type === 'pao' ? 4 : 3)
-        voice.say(text, { urgent: true, rate: 1 })
-        show(event.seat, text)
-        break
-      }
-      case 'hu': {
-        // 自摸、放炮、抢胡（胡别人摸出来的牌）都报出来
-        const kind = table.result?.kind ?? 'zimo'
-        const text = kind === 'zimo' ? '自摸' : kind === 'pao' ? '放炮' : '抢胡'
-        sfx.mahjongWin()
-        voice.say(text, { urgent: true, rate: 0.95 })
-        show(event.seat, kind === 'zimo' ? '自摸' : '胡')
-        if (kind === 'pao' && table.result && table.result.loser >= 0) {
-          const loser = table.result.loser
-          window.setTimeout(() => setBurst({ seat: loser, text: '放炮', key: table.seq + 0.5 }), 700)
+    const events = table.events
+    if (events.length === 0) return
+    const result = table.result
+    const seq = table.seq
+    const show = (seat: number, text: string) => setBurst({ seat, text, key: seq + Math.random() })
+    const perform = (event: LhEvent) => {
+      switch (event.t) {
+        case 'open':
+          sfx.flip()
+          voice.say(spoken(lhKind(event.tile)))
+          break
+        case 'draw':
+          sfx.tileDraw()
+          voice.say(spoken(lhKind(event.tile)))
+          break
+        case 'discard':
+          sfx.tileDiscard()
+          voice.say(spoken(lhKind(event.tile)))
+          break
+        case 'chi':
+          sfx.tileMeld(3)
+          voice.say('吃', { urgent: true, rate: 1 })
+          show(event.seat, '吃')
+          break
+        case 'meld': {
+          const text = event.again ? '重跑' : GROUP_NAME[event.type]
+          sfx.tileMeld(event.type === 'ti' || event.type === 'pao' ? 4 : 3)
+          voice.say(text, { urgent: true, rate: 1 })
+          show(event.seat, text)
+          break
         }
-        break
+        case 'hu': {
+          // 自摸、放炮、抢胡（胡别人摸出来的牌）都报出来
+          const kind = result?.kind ?? 'zimo'
+          sfx.mahjongWin()
+          voice.say(kind === 'zimo' ? '自摸' : kind === 'pao' ? '放炮' : '抢胡', { urgent: true, rate: 0.95 })
+          show(event.seat, kind === 'zimo' ? '自摸' : '胡')
+          if (kind === 'pao' && result && result.loser >= 0) timers.current.push(window.setTimeout(() => show(result.loser, '放炮'), 700))
+          break
+        }
+        case 'drawn-game':
+          sfx.lose()
+          voice.say('荒庄', { urgent: true, rate: 1 })
+          break
+        default:
+          break
       }
-      case 'drawn-game':
-        sfx.lose()
-        voice.say('荒庄', { urgent: true, rate: 1 })
-        break
-      default:
-        break
+    }
+    // 上一批还没演完就接在后面
+    const now = Date.now()
+    let at = Math.max(0, playUntil.current - now)
+    const lastTile = events.reduce((found, event, index) => (event.t === 'open' || event.t === 'draw' || event.t === 'discard' ? index : found), -1)
+    const later = (delay: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, delay)) }
+    events.forEach((event, index) => {
+      const isTile = event.t === 'open' || event.t === 'draw' || event.t === 'discard'
+      if (at === 0) {
+        perform(event)
+        if (isTile && index !== lastTile) setGhost({ tile: event.tile, from: event.seat, source: event.t })
+      } else {
+        later(at, () => {
+          perform(event)
+          if (isTile) setGhost(index === lastTile ? null : { tile: event.tile, from: event.seat, source: event.t })
+        })
+      }
+      // 每张牌亮够时间再换下一张；吃碰笑提跑的大字也留一下
+      if (isTile && index !== lastTile) at += 800
+      else if (event.t === 'meld' || event.t === 'chi') at += 500
+    })
+    playUntil.current = now + at
+    if (at > 0) {
+      setStaging(true)
+      later(at, () => {
+        if (Date.now() < playUntil.current - 20) return
+        setGhost(null)
+        setStaging(false)
+      })
     }
   }, [table.seq]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -222,7 +258,11 @@ export function Liuhu({ table }: { table: LhView }) {
   }
   const discard = (tile: number) => {
     if (!canDiscard) return
-    if (!table.choices.discards.includes(tile)) return toast('起手的坎不能拆着打', 'error')
+    if (!table.choices.discards.includes(tile)) {
+      const kind = lhKind(tile)
+      const isKan = table.hand.filter((item) => lhKind(item) === kind).length >= 3
+      return toast(isKan ? '起手的坎不能拆着打' : `别家笑了${lhName(kind)}：只有打出去能听牌时才可以打`, 'error')
+    }
     void act({ type: 'discard', tile })
   }
   /** 指针落在哪一列上；超出两头则是另起一列 */
@@ -357,7 +397,7 @@ export function Liuhu({ table }: { table: LhView }) {
                 </div>
               ))}
               <div className="lh-pile lh-pile-me">{me.discards.map((tile) => <Zi key={tile} kind={lhKind(tile)} className="s" />)}</div>
-              {shown && table.phase === 'claim' && (
+              {shown && (
                 <div key={shown.tile} className={`lh-shown from-${SIDES[shown.from]} ${shown.source}`}>
                   <Zi kind={lhKind(shown.tile)} className="xl" />
                   <em>{shown.source === 'open' ? `${WHO[shown.from]}的挡底` : `${WHO[shown.from]}${shown.source === 'draw' ? '摸出' : '打出'}`}</em>
